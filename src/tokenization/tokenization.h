@@ -20,7 +20,9 @@ typedef enum {
     TOKEN_PLUS,
     TOKEN_SUB,
     TOKEN_MULTI,
-    TOKEN_DIV
+    TOKEN_DIV,
+    TOKEN_OPEN_CURLY,
+    TOKEN_CLOSE_CURLY
 } TokenType;
 
 typedef struct {

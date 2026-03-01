@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "generation.h"
+#include "vartable.h"
 
 static void gen_expr(Generator *g, const NodeExpr *expr);
 
@@ -22,37 +23,85 @@ static void pop(Generator *g, const char *reg) {
     g->stack_size--;
 }
 
+typedef struct Scope {
+    VariableTable vars;
+    size_t base_stack_size;
+    struct Scope *parent;
+} Scope;
+
+static void begin_scope(Generator *g) {
+    Scope *s = malloc(sizeof(Scope));
+    if (!s) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+    var_table_init(&s->vars);
+    s->base_stack_size = g->stack_size;
+    s->parent = g->current_scope;
+    g->current_scope = s;
+}
+
+static void end_scope(Generator *g) {
+    Scope *s = g->current_scope;
+    size_t locals = g->stack_size - s->base_stack_size;
+    if (locals > 0) {
+        sb_append_fmt(&g->sb, "\tadd rsp, %zu\n", locals * 8);
+        g->stack_size = s->base_stack_size;
+    }
+    g->current_scope = s->parent;
+    var_table_free(&s->vars);
+    free(s);
+}
+
+static Variable *lookup_var(Generator *g, const char *name) {
+    Scope *s = g->current_scope;
+    while (s) {
+        Variable *var = var_table_find(&s->vars, name);
+        if (var)
+            return var;
+        s = s->parent;
+    }
+    return NULL;
+}
+
 void generator_init(Generator *g, const NodeProg *prog) {
     g->prog = prog;
     sb_init(&g->sb);
     g->stack_size = 0;
-    var_table_init(&g->vars);
+    g->current_scope = NULL;  // Important
+    begin_scope(g);
 }
 
 void generator_free(Generator *g) {
+    while (g->current_scope) {
+        end_scope(g);
+    }
     sb_free(&g->sb);
-    var_table_free(&g->vars);
 }
 
 static void gen_term(Generator *g, const NodeTerm *term) {
     switch (term->type) {
         
-        case TERM_INT_LIT:
+        case TERM_INT_LIT: {
             sb_append_fmt(&g->sb, "\tmov rax, %s\n", term->data.int_lit->int_lit.value);
             push(g, "rax");
             break;
+        }
 
-        case TERM_IDENT:
-            if (!var_table_contains(&g->vars, term->data.ident->ident.value)) {
+        case TERM_IDENT: {
+            Variable *var = lookup_var(g, term->data.ident->ident.value);
+            if (!var) {
                 fprintf(stderr, "Undeclared identifier: %s\n", term->data.ident->ident.value);
                 exit(EXIT_FAILURE);
             }
-            const Variable *var = var_table_find(&g->vars, term->data.ident->ident.value);
             push(g, "QWORD [rsp + %zu]", (g->stack_size - var->stack_loc - 1)*8);
             break;
+        }
 
-        case TERM_PAREN:
+        case TERM_PAREN: {
             gen_expr(g, term->data.paren->expr);
+            break;
+        }
 
         default:
             break;
@@ -133,12 +182,21 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
             break;
 
         case STMT_LET:
-            if (var_table_contains(&g->vars, stmt->data.let->ident.value)) {
+            if (var_table_contains(&g->current_scope->vars, stmt->data.let->ident.value)) {
                 fprintf(stderr, "Identifier already used: %s\n", stmt->data.let->ident.value);
                 exit(EXIT_FAILURE);
             }
-            var_table_append(&g->vars, stmt->data.let->ident.value, g->stack_size);
+            var_table_append(&g->current_scope->vars, stmt->data.let->ident.value, g->stack_size);
             gen_expr(g, stmt->data.let->expr);
+            break;
+
+        case STMT_SCOPE:
+            begin_scope(g);
+            NodeStmtScope *scope = stmt->data.scope;
+            for (size_t i = 0; i < scope->size; i++) {
+                gen_stmt(g, scope->stmts[i]);
+            }
+            end_scope(g);
             break;
 
         default:
@@ -149,10 +207,8 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
 char *gen_prog(Generator *g) {
     sb_append(&g->sb, "global _start\n_start:\n");
 
-    NodeStmtList *stmt = g->prog->stmts;
-    while (stmt) {
-        gen_stmt(g, stmt->stmt);
-        stmt = stmt->next;
+    for (size_t i = 0; i < g->prog->size; i++) {
+        gen_stmt(g, g->prog->stmts[i]);
     }
 
     // sb_append(g->sb,

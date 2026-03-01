@@ -182,32 +182,31 @@ static NodeExpr *parse_expr(Parser *p, int min_prec) {
 
 static NodeStmt *parse_stmt(Parser *p) {
     const Token t = parser_peek(p, PEEK_CURRENT);
-    parser_consume(p);
 
     switch (t.type) {
 
         case TOKEN_EXIT: {
 
+            parser_consume(p);
             NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             node_stmt->type = STMT_EXIT;
             node_stmt->data.exit = arena_alloc(p->arena, sizeof(NodeStmtExit));
             parser_expect(p, TOKEN_OPEN_PAREN, "Expected '('\n");
 
             NodeExpr *node_expr = parse_expr(p, 0);
-            if (node_expr) { 
-                node_stmt->data.exit->expr = node_expr; 
-                parser_expect(p, TOKEN_CLOSE_PAREN, "Expected ')'\n");
-                parser_expect(p, TOKEN_SEMICOLON, "Expected ';'\n");
-                return node_stmt;
-
-            } else {
+            if (!node_expr) { 
                 fprintf(stderr, "Invalid expression\n");
                 exit(EXIT_FAILURE);
             }
+            node_stmt->data.exit->expr = node_expr; 
+            parser_expect(p, TOKEN_CLOSE_PAREN, "Expected ')'\n");
+            parser_expect(p, TOKEN_SEMICOLON, "Expected ';'\n");
+            return node_stmt;
         }
 
         case TOKEN_LET: {
 
+            parser_consume(p);
             NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             node_stmt->type = STMT_LET;
             node_stmt->data.let = arena_alloc(p->arena, sizeof(NodeStmtLet));
@@ -215,15 +214,51 @@ static NodeStmt *parse_stmt(Parser *p) {
             parser_expect(p, TOKEN_EQ, "Expected '='\n");
 
             NodeExpr *node_expr = parse_expr(p, 0);
-            if (node_expr) {
-                node_stmt->data.let->expr = node_expr;
-                parser_expect(p, TOKEN_SEMICOLON, "Expected ';'\n");
-                return node_stmt;
-
-            } else {
+            if (!node_expr) {
                 fprintf(stderr, "Invalid expression\n");
                 exit(EXIT_FAILURE);
             }
+            node_stmt->data.let->expr = node_expr;
+            parser_expect(p, TOKEN_SEMICOLON, "Expected ';'\n");
+            return node_stmt;
+        }
+
+        case TOKEN_OPEN_CURLY: {
+
+            parser_consume(p);
+            NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
+            node_stmt->type = STMT_SCOPE;
+
+            NodeStmtScope *stmt_scope = arena_alloc(p->arena, sizeof(NodeStmtScope));
+            stmt_scope->size = 0;
+            stmt_scope->capacity = 4;
+            stmt_scope->stmts = arena_alloc(p->arena, stmt_scope->capacity * sizeof(NodeStmt *));
+
+            while (parser_peek(p, PEEK_CURRENT).type != TOKEN_CLOSE_CURLY &&
+                   parser_peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
+                NodeStmt *stmt = parse_stmt(p);
+                if (!stmt) {
+                    fprintf(stderr, "Invalid statement\n");
+                    exit(EXIT_FAILURE);
+                }
+                if (stmt_scope->size == stmt_scope->capacity) {
+                
+                    size_t new_capacity = stmt_scope->capacity * 2;
+                    NodeStmt **new_array = arena_alloc(p->arena, new_capacity * sizeof(NodeStmt *));
+
+                    for (size_t i = 0; i < stmt_scope->size; i++) {
+                        new_array[i] = stmt_scope->stmts[i];
+                    }
+
+                    stmt_scope->stmts = new_array;
+                    stmt_scope->capacity = new_capacity;
+                }
+                stmt_scope->stmts[stmt_scope->size++] = stmt;
+            }
+            parser_expect(p, TOKEN_CLOSE_CURLY, "Expected '}'\n");
+
+            node_stmt->data.scope = stmt_scope;
+            return node_stmt;
         }
 
         default: {
@@ -239,32 +274,34 @@ NodeProg parse_prog(Parser *p) {
     }
 
     NodeProg prog;
-    NodeStmtListBuilder ll = {0};
+    prog.size = 0;
+    prog.capacity = 4;
+    prog.stmts = arena_alloc(p->arena, prog.capacity * sizeof(NodeStmt *));
 
     while (parser_peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
 
         NodeStmt *stmt = parse_stmt(p);
 
-        if (stmt) {
-
-            NodeStmtList *node = arena_alloc(p->arena, sizeof(NodeStmtList));
-            node->stmt = stmt;
-            node->next = NULL;
-
-            if (!ll.head) {
-                ll.head = node;
-            } else {
-                ll.tail->next = node;
-            }
-            ll.tail = node;
-            ll.size++;
-
-        } else {
+        if (!stmt) {
             fprintf(stderr, "Invalid statement\n");
             exit(EXIT_FAILURE);
         }
+
+        if (prog.size == prog.capacity) {
+            size_t new_capacity = prog.capacity * 2;
+            NodeStmt **new_array = arena_alloc(p->arena, new_capacity * sizeof(NodeStmt *));
+
+            for (size_t i = 0; i < prog.size; i++) {
+                new_array[i] = prog.stmts[i];
+            }
+
+            prog.stmts = new_array;
+            prog.capacity = new_capacity;
+        }
+
+        prog.stmts[prog.size++] = stmt;
+
     }
 
-    prog.stmts = ll.head;
     return prog;
 }

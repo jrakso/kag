@@ -4,11 +4,13 @@
 #include "helpers/strbuilder.h"
 #include "vartable.h"
 
+typedef struct Scope Scope;
+
 typedef struct {
     const NodeProg *prog;
     StringBuilder sb;
     size_t stack_size;
-    VariableTable vars;
+    Scope *current_scope;
 } Generator;
 
 void generator_init(Generator *g, const NodeProg *prog);

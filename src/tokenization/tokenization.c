@@ -165,6 +165,16 @@ TokenArray tokenize(const char *src) {
             token_array_append(&tokens, (Token){ .type = TOKEN_SEMICOLON, .value = NULL });
         }
 
+        else if (c == '{') {
+            tokenizer_consume(&t);
+            token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_CURLY, .value = NULL });
+        }
+
+        else if (c == '}') {
+            tokenizer_consume(&t);
+            token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_CURLY, .value = NULL });
+        }
+
         else if (isspace(c)) {
             tokenizer_consume(&t);
         }

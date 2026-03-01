@@ -11,7 +11,6 @@ typedef struct NodeBinExprDiv NodeBinExprDiv;
 typedef struct NodeBinExprAdd NodeBinExprAdd;
 typedef struct NodeBinExprSub NodeBinExprSub;
 typedef struct NodeStmt NodeStmt;
-typedef struct NodeStmtList NodeStmtList;
 typedef struct NodeTerm NodeTerm;
 
 // ─── Enums ─────────────────────────────────────────────
@@ -37,7 +36,8 @@ typedef enum {
 typedef enum {
     STMT_INVALID,
     STMT_EXIT,
-    STMT_LET
+    STMT_LET,
+    STMT_SCOPE
 } NodeStmtType;
 
 // ─── Expression Nodes ──────────────────────────────────
@@ -110,29 +110,26 @@ typedef struct {
     NodeExpr *expr;
 } NodeStmtLet;
 
+typedef struct {
+    NodeStmt **stmts;
+    size_t size;
+    size_t capacity;
+} NodeStmtScope;
+
 struct NodeStmt {
     NodeStmtType type;
     union {
         NodeStmtExit *exit;
         NodeStmtLet *let;
+        NodeStmtScope *scope;
     } data;
 };
 
-// ─── Statement List ────────────────────────────────────
-struct NodeStmtList {
-    NodeStmt *stmt;
-    NodeStmtList *next;
-};
-
-typedef struct {
-    NodeStmtList *head;
-    NodeStmtList *tail;
-    size_t size;
-} NodeStmtListBuilder;
-
 // ─── Program Node ──────────────────────────────────────
 typedef struct {
-    NodeStmtList *stmts;
+    NodeStmt **stmts;
+    size_t size;
+    size_t capacity;
 } NodeProg;
 
 // ─── Parser ────────────────────────────────────────────
