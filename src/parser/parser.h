@@ -25,7 +25,8 @@ typedef enum {
 
 typedef enum {
     TERM_INT_LIT,
-    TERM_IDENT
+    TERM_IDENT,
+    TERM_PAREN
 } NodeTermType;
 
 typedef enum {
@@ -48,6 +49,10 @@ typedef struct {
     Token ident;
 } NodeTermIdent;
 
+typedef struct {
+    NodeExpr *expr;
+} NodeTermParen;
+
 struct NodeBinExpr {
     NodeBinExprType type;
     union {
@@ -63,6 +68,7 @@ struct NodeTerm {
     union {
         NodeTermIntLit *int_lit;
         NodeTermIdent *ident;
+        NodeTermParen *paren;
     } data;
 };
 

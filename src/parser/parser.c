@@ -45,7 +45,7 @@ static NodeTerm *parse_term(Parser *p) {
         case TOKEN_INT_LITERAL: {
             NodeTermIntLit *term_int_lit = arena_alloc(p->arena, sizeof(NodeTermIntLit));
             term_int_lit->int_lit = parser_consume(p);
-        NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
+            NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
             term->type = TERM_INT_LIT;
             term->data.int_lit = term_int_lit;
             return term;
@@ -57,13 +57,28 @@ static NodeTerm *parse_term(Parser *p) {
             NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
             term->type = TERM_IDENT;
             term->data.ident = term_ident;
-        return term;
-    }
+            return term;
+        }
+
+        case TOKEN_OPEN_PAREN: {
+            parser_consume(p);
+            NodeExpr *expr = parse_expr(p, 0);
+            if (!expr) {
+                fprintf(stderr, "Expected expression\n");
+                exit(EXIT_FAILURE);
+            }
+            parser_expect(p, TOKEN_CLOSE_PAREN, "Expected ')'");
+            NodeTermParen *term_paren = arena_alloc(p->arena, sizeof(NodeTermParen));
+            term_paren->expr = expr;
+            NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
+            term->type = TERM_PAREN;
+            term->data.paren = term_paren;
+            return term;
+        }
 
         default: {
-    return NULL;
-}
-
+            return NULL;
+        }
     }
 }
 
@@ -97,7 +112,7 @@ static NodeExpr *parse_expr(Parser *p, int min_prec) {
         Token curr_tok = parser_peek(p, PEEK_CURRENT);
         int prec = bin_prec(curr_tok.type);
 
-        if (curr_tok.type == TOKEN_EOF || prec < min_prec) {
+        if (prec < min_prec) {
             break;
         }
 

@@ -51,10 +51,11 @@ static void gen_term(Generator *g, const NodeTerm *term) {
             push(g, "QWORD [rsp + %zu]", (g->stack_size - var->stack_loc - 1)*8);
             break;
 
-        default: {
-            break;
-        }
+        case TERM_PAREN:
+            gen_expr(g, term->data.paren->expr);
 
+        default:
+            break;
     }
 }
 
