@@ -101,6 +101,29 @@ TokenArray tokenize(const char *src) {
             token_array_append(&tokens, (Token){ .type = TOKEN_INT_LITERAL, .value = value });
         }
 
+        // switch (c)
+        // {
+        // case '(':
+        //     /* code */
+        //     break;
+        // case ')':
+        //     break;
+        // case '=':
+        //     break;
+        // case '+':
+        //     break;
+        // case '-':
+        //     break;
+        // case '*':
+        //     break;
+        // case '/':
+        //     break;
+        // case ';':
+        //     break;
+        // default:
+        //     break;
+        // }
+
         else if (c == '(') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_PAREN, .value = NULL });
@@ -121,9 +144,19 @@ TokenArray tokenize(const char *src) {
             token_array_append(&tokens, (Token){ .type = TOKEN_PLUS, .value = NULL });
         }
 
+        else if (c == '-') {
+            tokenizer_consume(&t);
+            token_array_append(&tokens, (Token){ .type = TOKEN_SUB, .value = NULL });
+        }
+
         else if (c == '*') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_MULTI, .value = NULL });
+        }
+
+        else if (c == '/') {
+            tokenizer_consume(&t);
+            token_array_append(&tokens, (Token){ .type = TOKEN_DIV, .value = NULL });
         }
 
 

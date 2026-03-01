@@ -7,7 +7,9 @@
 typedef struct NodeExpr NodeExpr;
 typedef struct NodeBinExpr NodeBinExpr;
 typedef struct NodeBinExprMulti NodeBinExprMulti;
+typedef struct NodeBinExprDiv NodeBinExprDiv;
 typedef struct NodeBinExprAdd NodeBinExprAdd;
+typedef struct NodeBinExprSub NodeBinExprSub;
 typedef struct NodeStmt NodeStmt;
 typedef struct NodeStmtList NodeStmtList;
 typedef struct NodeTerm NodeTerm;
@@ -16,7 +18,9 @@ typedef struct NodeTerm NodeTerm;
 typedef enum {
     BIN_INVALID,
     BIN_MULTI,
-    BIN_ADD
+    BIN_DIV,
+    BIN_ADD,
+    BIN_SUB
 } NodeBinExprType;
 
 typedef enum {
@@ -48,7 +52,9 @@ struct NodeBinExpr {
     NodeBinExprType type;
     union {
         NodeBinExprMulti *multi;
+        NodeBinExprDiv *div;
         NodeBinExprAdd *add;
+        NodeBinExprSub *sub;
     } data;
 };
 
@@ -73,7 +79,17 @@ struct NodeBinExprMulti {
     NodeExpr *rhs;
 };
 
+struct NodeBinExprDiv {
+    NodeExpr *lhs;
+    NodeExpr *rhs;
+};
+
 struct NodeBinExprAdd {
+    NodeExpr *lhs;
+    NodeExpr *rhs;
+};
+
+struct NodeBinExprSub {
     NodeExpr *lhs;
     NodeExpr *rhs;
 };

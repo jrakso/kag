@@ -62,20 +62,38 @@ static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
     switch (bin_expr->type) {
 
         case BIN_ADD:
-            gen_expr(g, bin_expr->data.add->lhs);
             gen_expr(g, bin_expr->data.add->rhs);
+            gen_expr(g, bin_expr->data.add->lhs);
             pop(g, "rax");
             pop(g, "rbx");
             sb_append(&g->sb, "\tadd rax, rbx\n");
             push(g, "rax");
             break;
 
+        case BIN_SUB:
+            gen_expr(g, bin_expr->data.sub->rhs);
+            gen_expr(g, bin_expr->data.sub->lhs);
+            pop(g, "rax");
+            pop(g, "rbx");
+            sb_append(&g->sb, "\tsub rax, rbx\n");
+            push(g, "rax");
+            break;
+
         case BIN_MULTI:
-            gen_expr(g, bin_expr->data.multi->lhs);
             gen_expr(g, bin_expr->data.multi->rhs);
+            gen_expr(g, bin_expr->data.multi->lhs);
             pop(g, "rax");
             pop(g, "rbx");
             sb_append(&g->sb, "\tmul rbx\n");
+            push(g, "rax");
+            break;
+
+        case BIN_DIV:
+            gen_expr(g, bin_expr->data.div->rhs);
+            gen_expr(g, bin_expr->data.div->lhs);
+            pop(g, "rax");
+            pop(g, "rbx");
+            sb_append(&g->sb, "\tdiv rbx\n");
             push(g, "rax");
             break;
 

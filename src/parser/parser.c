@@ -70,9 +70,13 @@ static NodeTerm *parse_term(Parser *p) {
 static int bin_prec(TokenType type) {
     switch (type) {
         case TOKEN_PLUS:
-            return 1;
+            return 0;
+        case TOKEN_SUB:
+            return 0;
         case TOKEN_MULTI:
-            return 2;
+            return 1;
+        case TOKEN_DIV:
+            return 1;
         default:
             return -1;
     }
@@ -118,12 +122,30 @@ static NodeExpr *parse_expr(Parser *p, int min_prec) {
                 break;
             }
 
+            case TOKEN_SUB: {
+                NodeBinExprSub *bin_expr_sub = arena_alloc(p->arena, sizeof(NodeBinExprSub));
+                bin_expr_sub->lhs = expr_lhs;
+                bin_expr_sub->rhs = expr_rhs;
+                bin_expr->type = BIN_SUB;
+                bin_expr->data.sub = bin_expr_sub;
+                break;
+            }
+
             case TOKEN_MULTI: {
                 NodeBinExprMulti *bin_expr_multi = arena_alloc(p->arena, sizeof(NodeBinExprMulti));
                 bin_expr_multi->lhs = expr_lhs;
                 bin_expr_multi->rhs = expr_rhs;
                 bin_expr->type = BIN_MULTI;
                 bin_expr->data.multi = bin_expr_multi;
+                break;
+            }
+
+            case TOKEN_DIV: {
+                NodeBinExprDiv *bin_expr_div = arena_alloc(p->arena, sizeof(NodeBinExprDiv));
+                bin_expr_div->lhs = expr_lhs;
+                bin_expr_div->rhs = expr_rhs;
+                bin_expr->type = BIN_DIV;
+                bin_expr->data.div = bin_expr_div;
                 break;
             }
 
