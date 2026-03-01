@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 #include "tokenization.h"
 
@@ -61,6 +62,17 @@ static char tokenizer_peek(const Tokenizer *t, size_t offset) {
 
 static char tokenizer_consume(Tokenizer *t) {
     return t->src[t->pos++];
+}
+
+int bin_prec(TokenType type) {
+    switch (type) {
+        case TOKEN_PLUS:
+            return 1;
+        case TOKEN_MULTI:
+            return 2;
+        default:
+            return -1;
+    }
 }
 
 TokenArray tokenize(const char *src) {

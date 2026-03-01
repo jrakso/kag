@@ -5,6 +5,8 @@
 
 #include "generation.h"
 
+static void gen_expr(Generator *g, const NodeExpr *expr);
+
 static void push(Generator *g, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -20,7 +22,7 @@ static void pop(Generator *g, const char *reg) {
     g->stack_size--;
 }
 
-void generator_init(Generator *g, NodeProg *prog) {
+void generator_init(Generator *g, const NodeProg *prog) {
     g->prog = prog;
     sb_init(&g->sb);
     g->stack_size = 0;
@@ -49,7 +51,35 @@ static void gen_term(Generator *g, const NodeTerm *term) {
             push(g, "QWORD [rsp + %zu]", (g->stack_size - var->stack_loc - 1)*8);
             break;
 
-        default:
+        default: {
+            break;
+        }
+
+    }
+}
+
+static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
+    switch (bin_expr->type) {
+
+        case BIN_ADD:
+            gen_expr(g, bin_expr->data.add->lhs);
+            gen_expr(g, bin_expr->data.add->rhs);
+            pop(g, "rax");
+            pop(g, "rbx");
+            sb_append(&g->sb, "\tadd rax, rbx\n");
+            push(g, "rax");
+            break;
+
+        case BIN_MULTI:
+            gen_expr(g, bin_expr->data.multi->lhs);
+            gen_expr(g, bin_expr->data.multi->rhs);
+            pop(g, "rax");
+            pop(g, "rbx");
+            sb_append(&g->sb, "\tmul rbx\n");
+            push(g, "rax");
+            break;
+
+        default: 
             break;
 
     }
@@ -63,16 +93,12 @@ static void gen_expr(Generator *g, const NodeExpr *expr) {
             break;
 
         case EXPR_BIN:
-            gen_expr(g, expr->data.bin->data.add->lhs);
-            gen_expr(g, expr->data.bin->data.add->rhs);
-            pop(g, "rax");
-            pop(g, "rbx");
-            sb_append(&g->sb, "\tadd rax, rbx\n");
-            push(g, "rax");
+            gen_bin_expr(g, expr->data.bin);
             break;
 
-        default:
+        default: 
             break;
+
     }
 
 }

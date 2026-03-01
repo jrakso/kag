@@ -6,7 +6,7 @@
 #include "parser.h"
 #include "tokenization/tokenization.h"
 
-static NodeExpr *parse_expr(Parser *p);
+static NodeExpr *parse_expr(Parser *p, int min_prec);
 
 void parser_init(Parser *p, const TokenArray *arr) {
     p->tokens = arr->tokens;
@@ -67,49 +67,69 @@ static NodeTerm *parse_term(Parser *p) {
     }
 }
 
-static NodeExpr *parse_expr(Parser *p) {
-    NodeTerm *term = parse_term(p);
-    if (term) {
-        switch (parser_peek(p, PEEK_CURRENT).type) {
+static NodeExpr *parse_expr(Parser *p, int min_prec) {
+    NodeTerm *term_lhs = parse_term(p);
+
+    if (!term_lhs) {
+        return NULL;
+    }
+
+    NodeExpr *expr_lhs = arena_alloc(p->arena, sizeof(NodeExpr));
+    expr_lhs->type = EXPR_TERM;
+    expr_lhs->data.term = term_lhs;
+
+    while (true) {
+        Token curr_tok = parser_peek(p, PEEK_CURRENT);
+        int prec = bin_prec(curr_tok.type);
+
+        if (curr_tok.type == TOKEN_INVALID || prec < min_prec) {
+            break;
+        }
+
+        Token op = parser_consume(p);
+
+        NodeExpr *expr_rhs = parse_expr(p, prec + 1);
+        if (!expr_rhs) {
+            fprintf(stderr, "Unable to parse expression\n");
+            exit(EXIT_FAILURE);
+        }
+
+        NodeBinExpr *bin_expr = arena_alloc(p->arena, sizeof(NodeBinExpr));
+
+        switch (op.type) {
 
             case TOKEN_PLUS: {
-                parser_consume(p);
-                NodeExpr *lhs_expr = arena_alloc(p->arena, sizeof(NodeExpr));
-                lhs_expr->type = EXPR_TERM;
-                lhs_expr->data.term = term;
-                NodeExpr *rhs_expr = parse_expr(p);
-                if (!rhs_expr) {
-                    fprintf(stderr, "Expected expression\n");
-                    exit(EXIT_FAILURE);
-                }
                 NodeBinExprAdd *bin_expr_add = arena_alloc(p->arena, sizeof(NodeBinExprAdd));
-                bin_expr_add->lhs = lhs_expr;
-                bin_expr_add->rhs = rhs_expr;
-                NodeBinExpr *bin_expr = arena_alloc(p->arena, sizeof(NodeBinExpr));
+                bin_expr_add->lhs = expr_lhs;
+                bin_expr_add->rhs = expr_rhs;
                 bin_expr->type = BIN_ADD;
                 bin_expr->data.add = bin_expr_add;
-                NodeExpr *expr = arena_alloc(p->arena, sizeof(NodeExpr));
-                expr->type = EXPR_BIN;
-                expr->data.bin = bin_expr;
-                return expr;
+                break;
             }
 
             case TOKEN_MULTI: {
-                fprintf(stderr, "Unsupported binary operator\n");
-                exit(EXIT_FAILURE);
+                NodeBinExprMulti *bin_expr_multi = arena_alloc(p->arena, sizeof(NodeBinExprMulti));
+                bin_expr_multi->lhs = expr_lhs;
+                bin_expr_multi->rhs = expr_rhs;
+                bin_expr->type = BIN_MULTI;
+                bin_expr->data.multi = bin_expr_multi;
+                break;
             }
-            
+
             default: {
-                NodeExpr *expr = arena_alloc(p->arena, sizeof(NodeExpr));
-                expr->type = EXPR_TERM;
-                expr->data.term = term;
-                return expr;
+                fprintf(stderr, "Invalid binary operator\n");
+                exit(EXIT_FAILURE);
             }
 
         }
-    } else {
-        return NULL;
+
+        NodeExpr *new_expr = arena_alloc(p->arena, sizeof(NodeExpr));
+        new_expr->type = EXPR_BIN;
+        new_expr->data.bin = bin_expr;
+        expr_lhs = new_expr;
+
     }
+    return expr_lhs;
 }
 
 static NodeStmt *parse_stmt(Parser *p) {
@@ -125,7 +145,7 @@ static NodeStmt *parse_stmt(Parser *p) {
             node_stmt->data.exit = arena_alloc(p->arena, sizeof(NodeStmtExit));
             parser_expect(p, TOKEN_OPEN_PAREN, "Expected '('\n");
 
-            NodeExpr *node_expr = parse_expr(p);
+            NodeExpr *node_expr = parse_expr(p, 0);
             if (node_expr) { 
                 node_stmt->data.exit->expr = node_expr; 
                 parser_expect(p, TOKEN_CLOSE_PAREN, "Expected ')'\n");
@@ -146,7 +166,7 @@ static NodeStmt *parse_stmt(Parser *p) {
             node_stmt->data.let->ident = parser_expect(p, TOKEN_IDENT, "Expected Identifier\n");
             parser_expect(p, TOKEN_EQ, "Expected '='\n");
 
-            NodeExpr *node_expr = parse_expr(p);
+            NodeExpr *node_expr = parse_expr(p, 0);
             if (node_expr) {
                 node_stmt->data.let->expr = node_expr;
                 parser_expect(p, TOKEN_SEMICOLON, "Expected ';'\n");
@@ -196,6 +216,7 @@ NodeProg parse_prog(Parser *p) {
             exit(EXIT_FAILURE);
         }
     }
+
     prog.stmts = ll.head;
     return prog;
 }
