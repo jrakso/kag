@@ -82,7 +82,7 @@ static NodeExpr *parse_expr(Parser *p, int min_prec) {
         Token curr_tok = parser_peek(p, PEEK_CURRENT);
         int prec = bin_prec(curr_tok.type);
 
-        if (curr_tok.type == TOKEN_INVALID || prec < min_prec) {
+        if (curr_tok.type == TOKEN_EOF || prec < min_prec) {
             break;
         }
 
