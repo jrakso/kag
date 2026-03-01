@@ -38,6 +38,5 @@ typedef struct {
     size_t pos;
 } Tokenizer;
 
-int bin_prec(TokenType type);
 TokenArray tokenize(const char *src);  // caller frees with token_array_free
 void token_array_free(TokenArray *arr);  // frees tokens and token values

@@ -67,6 +67,17 @@ static NodeTerm *parse_term(Parser *p) {
     }
 }
 
+static int bin_prec(TokenType type) {
+    switch (type) {
+        case TOKEN_PLUS:
+            return 1;
+        case TOKEN_MULTI:
+            return 2;
+        default:
+            return -1;
+    }
+}
+
 static NodeExpr *parse_expr(Parser *p, int min_prec) {
     NodeTerm *term_lhs = parse_term(p);
 

@@ -64,17 +64,6 @@ static char tokenizer_consume(Tokenizer *t) {
     return t->src[t->pos++];
 }
 
-int bin_prec(TokenType type) {
-    switch (type) {
-        case TOKEN_PLUS:
-            return 1;
-        case TOKEN_MULTI:
-            return 2;
-        default:
-            return -1;
-    }
-}
-
 TokenArray tokenize(const char *src) {
     Tokenizer t = { .src = src, .len = strlen(src), .pos = START };
     TokenArray tokens;
