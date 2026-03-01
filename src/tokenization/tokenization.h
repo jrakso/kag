@@ -8,7 +8,7 @@
 #define PEEK_NEXT    1
 
 typedef enum {
-    TOKEN_INVALID,
+    TOKEN_EOF,
     TOKEN_EXIT,
     TOKEN_INT_LITERAL,
     TOKEN_SEMICOLON,

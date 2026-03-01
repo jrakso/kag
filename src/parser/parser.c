@@ -21,7 +21,7 @@ void parser_free(Parser *p) {
 
 static Token parser_peek(const Parser *p, size_t offset) {
     if (p->pos + offset >= p->size) {
-        return (Token) { .type = TOKEN_INVALID };
+        return (Token) { .type = TOKEN_EOF };
     }
     return p->tokens[p->pos + offset];
 }
@@ -45,7 +45,7 @@ static NodeTerm *parse_term(Parser *p) {
         case TOKEN_INT_LITERAL: {
             NodeTermIntLit *term_int_lit = arena_alloc(p->arena, sizeof(NodeTermIntLit));
             term_int_lit->int_lit = parser_consume(p);
-            NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
+        NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
             term->type = TERM_INT_LIT;
             term->data.int_lit = term_int_lit;
             return term;
@@ -57,12 +57,12 @@ static NodeTerm *parse_term(Parser *p) {
             NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
             term->type = TERM_IDENT;
             term->data.ident = term_ident;
-            return term;
-        }
+        return term;
+    }
 
         default: {
-            return NULL;
-        }
+    return NULL;
+}
 
     }
 }
@@ -193,7 +193,7 @@ NodeProg parse_prog(Parser *p) {
     NodeProg prog;
     NodeStmtListBuilder ll = {0};
 
-    while (parser_peek(p, PEEK_CURRENT).type != TOKEN_INVALID) {
+    while (parser_peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
 
         NodeStmt *stmt = parse_stmt(p);
 
