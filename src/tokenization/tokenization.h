@@ -18,9 +18,9 @@ typedef enum {
     TOKEN_LET,
     TOKEN_EQ,
     TOKEN_PLUS,
-    TOKEN_SUB,
+    TOKEN_MINUS,
     TOKEN_MULTI,
-    TOKEN_DIV,
+    TOKEN_FSLASH,
     TOKEN_OPEN_CURLY,
     TOKEN_CLOSE_CURLY,
     TOKEN_IF

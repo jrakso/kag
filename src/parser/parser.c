@@ -83,11 +83,11 @@ static int bin_prec(TokenType type) {
     switch (type) {
         case TOKEN_PLUS:
             return 0;
-        case TOKEN_SUB:
+        case TOKEN_MINUS:
             return 0;
         case TOKEN_MULTI:
             return 1;
-        case TOKEN_DIV:
+        case TOKEN_FSLASH:
             return 1;
         default:
             return -1;
@@ -124,7 +124,7 @@ static NodeExpr *parse_expr(Parser *p, int min_prec) {
                 bin_expr->data.add = bin_expr_add;
                 break;
             }
-            case TOKEN_SUB: {
+            case TOKEN_MINUS: {
                 NodeBinExprSub *bin_expr_sub = arena_alloc(p->arena, sizeof(NodeBinExprSub));
                 bin_expr_sub->lhs = expr_lhs;
                 bin_expr_sub->rhs = expr_rhs;
@@ -140,7 +140,7 @@ static NodeExpr *parse_expr(Parser *p, int min_prec) {
                 bin_expr->data.multi = bin_expr_multi;
                 break;
             }
-            case TOKEN_DIV: {
+            case TOKEN_FSLASH: {
                 NodeBinExprDiv *bin_expr_div = arena_alloc(p->arena, sizeof(NodeBinExprDiv));
                 bin_expr_div->lhs = expr_lhs;
                 bin_expr_div->rhs = expr_rhs;

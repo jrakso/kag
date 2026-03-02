@@ -139,7 +139,7 @@ TokenArray tokenize(const char *src) {
         }
         else if (c == '-') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_SUB, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_MINUS, .value = NULL });
         }
         else if (c == '*') {
             tokenizer_consume(&t);
@@ -147,7 +147,7 @@ TokenArray tokenize(const char *src) {
         }
         else if (c == '/') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_DIV, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_FSLASH, .value = NULL });
         }
         else if (c == ';') {
             tokenizer_consume(&t);
