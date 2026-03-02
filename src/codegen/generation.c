@@ -190,13 +190,13 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
             gen_scope(g, stmt->data.scope);
             break;
         case STMT_IF:
+            size_t label_id = g->label_count++;
             gen_expr(g, stmt->data.if_->expr);
             pop(g, "rax");
             sb_append(&g->sb, "\ttest rax, rax\n");
-            g->label_count++;
-            sb_append_fmt(&g->sb, "\tjz label%zu\n", g->label_count);
+            sb_append_fmt(&g->sb, "\tjz label%zu\n", label_id);
             gen_scope(g, stmt->data.if_->scope);  // Scope before label since jmp zero instruction
-            sb_append_fmt(&g->sb, "label%zu:\n", g->label_count);
+            sb_append_fmt(&g->sb, "label%zu:\n", label_id);
             break;
         default:
             break;
