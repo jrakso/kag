@@ -208,10 +208,11 @@ char *gen_prog(Generator *g) {
     for (size_t i = 0; i < g->prog->size; i++) {
         gen_stmt(g, g->prog->stmts[i]);
     }
-    // sb_append(g->sb,
-    //     "\tmov rax, 60\n"
-    //     "\tmov rdi, 0\n"
-    //     "\tsyscall\n");
+    // Default exit
+    sb_append(&g->sb,
+        "\tmov rax, 60\n"
+        "\tmov rdi, 0\n"
+        "\tsyscall\n");
 
     return g->sb.data;
 }
