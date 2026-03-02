@@ -99,28 +99,13 @@ TokenArray tokenize(const char *src) {
             char *value = copy_token_value(t.src, start, end);
             token_array_append(&tokens, (Token){ .type = TOKEN_INT_LITERAL, .value = value });
         }
-        // switch (c)
-        // {
-        // case '(':
-        //     /* code */
-        //     break;
-        // case ')':
-        //     break;
-        // case '=':
-        //     break;
-        // case '+':
-        //     break;
-        // case '-':
-        //     break;
-        // case '*':
-        //     break;
-        // case '/':
-        //     break;
-        // case ';':
-        //     break;
-        // default:
-        //     break;
-        // }
+        else if (c == '/' && tokenizer_peek(&t, PEEK_NEXT) == '/') {
+            tokenizer_consume(&t);
+            tokenizer_consume(&t);
+            while (tokenizer_peek(&t, PEEK_CURRENT) != '\0' && tokenizer_peek(&t, PEEK_CURRENT) != '\n') {
+                tokenizer_consume(&t);
+            }
+        }
         else if (c == '(') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_PAREN, .value = NULL });
