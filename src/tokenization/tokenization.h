@@ -22,7 +22,8 @@ typedef enum {
     TOKEN_MULTI,
     TOKEN_DIV,
     TOKEN_OPEN_CURLY,
-    TOKEN_CLOSE_CURLY
+    TOKEN_CLOSE_CURLY,
+    TOKEN_IF
 } TokenType;
 
 typedef struct {

@@ -10,6 +10,7 @@ typedef struct {
     const NodeProg *prog;
     StringBuilder sb;
     size_t stack_size;
+    size_t label_count;
     Scope *current_scope;
 } Generator;
 

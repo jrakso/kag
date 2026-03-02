@@ -37,7 +37,8 @@ typedef enum {
     STMT_INVALID,
     STMT_EXIT,
     STMT_LET,
-    STMT_SCOPE
+    STMT_SCOPE,
+    STMT_IF
 } NodeStmtType;
 
 // ─── Expression Nodes ──────────────────────────────────
@@ -114,14 +115,20 @@ typedef struct {
     NodeStmt **stmts;
     size_t size;
     size_t capacity;
-} NodeStmtScope;
+} NodeScope;
+
+typedef struct {
+    NodeExpr *expr;
+    NodeScope *scope;
+} NodeStmtIf;
 
 struct NodeStmt {
     NodeStmtType type;
     union {
         NodeStmtExit *exit;
         NodeStmtLet *let;
-        NodeStmtScope *scope;
+        NodeScope *scope;
+        NodeStmtIf *if_;
     } data;
 };
 

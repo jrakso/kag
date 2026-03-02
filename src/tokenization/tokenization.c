@@ -68,10 +68,8 @@ TokenArray tokenize(const char *src) {
     Tokenizer t = { .src = src, .len = strlen(src), .pos = START };
     TokenArray tokens;
     token_array_init(&tokens);  // caller frees with token_array_free
-
     while (tokenizer_peek(&t, PEEK_CURRENT) != '\0') {
         const char c = tokenizer_peek(&t, PEEK_CURRENT);
-
         if (isalpha(c)) {
             size_t start = t.pos;
             tokenizer_consume(&t);
@@ -79,18 +77,19 @@ TokenArray tokenize(const char *src) {
                 tokenizer_consume(&t);
             size_t end = t.pos;
             char *value = copy_token_value(t.src, start, end);
-
             if (strcmp(value, "exit") == 0) {
                 token_array_append(&tokens, (Token){ .type = TOKEN_EXIT, .value = NULL });
                 free(value);  // prevent leak
             } else if (strcmp(value, "let") == 0) {
                 token_array_append(&tokens, (Token){ .type = TOKEN_LET, .value = NULL });
                 free(value);  // prevent leak)
+            } else if (strcmp(value, "if") == 0) {
+                token_array_append(&tokens, (Token){ .type = TOKEN_IF, .value = NULL });
+                free(value);  // prevent leak)
             } else {
                 token_array_append(&tokens, (Token){ .type = TOKEN_IDENT, .value = value });
             }
         }
-
         else if (isdigit(c)) {
             size_t start = t.pos;
             tokenizer_consume(&t);
@@ -100,7 +99,6 @@ TokenArray tokenize(const char *src) {
             char *value = copy_token_value(t.src, start, end);
             token_array_append(&tokens, (Token){ .type = TOKEN_INT_LITERAL, .value = value });
         }
-
         // switch (c)
         // {
         // case '(':
@@ -123,62 +121,49 @@ TokenArray tokenize(const char *src) {
         // default:
         //     break;
         // }
-
         else if (c == '(') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_PAREN, .value = NULL });
         }
-
         else if (c == ')') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_PAREN, .value = NULL });
         }
-
         else if (c == '=') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_EQ, .value = NULL });
         }
-
         else if (c == '+') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_PLUS, .value = NULL });
         }
-
         else if (c == '-') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_SUB, .value = NULL });
         }
-
         else if (c == '*') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_MULTI, .value = NULL });
         }
-
         else if (c == '/') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_DIV, .value = NULL });
         }
-
-
         else if (c == ';') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_SEMICOLON, .value = NULL });
         }
-
         else if (c == '{') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_CURLY, .value = NULL });
         }
-
         else if (c == '}') {
             tokenizer_consume(&t);
             token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_CURLY, .value = NULL });
         }
-
         else if (isspace(c)) {
             tokenizer_consume(&t);
         }
-
         else {
             fprintf(stderr, "Unexpected character '%c' at index %zu\n",
                     tokenizer_peek(&t, PEEK_CURRENT), t.pos);

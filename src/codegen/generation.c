@@ -7,6 +7,7 @@
 #include "vartable.h"
 
 static void gen_expr(Generator *g, const NodeExpr *expr);
+static void gen_stmt(Generator *g, const NodeStmt *stmt);
 
 static void push(Generator *g, const char *fmt, ...) {
     va_list args;
@@ -53,6 +54,10 @@ static void end_scope(Generator *g) {
     free(s);
 }
 
+// static char *create_label(Generator *g) {
+//     g->sb.
+// }
+
 static Variable *lookup_var(Generator *g, const char *name) {
     Scope *s = g->current_scope;
     while (s) {
@@ -68,6 +73,7 @@ void generator_init(Generator *g, const NodeProg *prog) {
     g->prog = prog;
     sb_init(&g->sb);
     g->stack_size = 0;
+    g->label_count = 0;
     g->current_scope = NULL;  // Important
     begin_scope(g);
 }
@@ -80,14 +86,12 @@ void generator_free(Generator *g) {
 }
 
 static void gen_term(Generator *g, const NodeTerm *term) {
-    switch (term->type) {
-        
+    switch (term->type) {      
         case TERM_INT_LIT: {
             sb_append_fmt(&g->sb, "\tmov rax, %s\n", term->data.int_lit->int_lit.value);
             push(g, "rax");
             break;
         }
-
         case TERM_IDENT: {
             Variable *var = lookup_var(g, term->data.ident->ident.value);
             if (!var) {
@@ -97,12 +101,10 @@ static void gen_term(Generator *g, const NodeTerm *term) {
             push(g, "QWORD [rsp + %zu]", (g->stack_size - var->stack_loc - 1)*8);
             break;
         }
-
         case TERM_PAREN: {
             gen_expr(g, term->data.paren->expr);
             break;
         }
-
         default:
             break;
     }
@@ -110,7 +112,6 @@ static void gen_term(Generator *g, const NodeTerm *term) {
 
 static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
     switch (bin_expr->type) {
-
         case BIN_ADD:
             gen_expr(g, bin_expr->data.add->rhs);
             gen_expr(g, bin_expr->data.add->lhs);
@@ -119,7 +120,6 @@ static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
             sb_append(&g->sb, "\tadd rax, rbx\n");
             push(g, "rax");
             break;
-
         case BIN_SUB:
             gen_expr(g, bin_expr->data.sub->rhs);
             gen_expr(g, bin_expr->data.sub->lhs);
@@ -128,7 +128,6 @@ static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
             sb_append(&g->sb, "\tsub rax, rbx\n");
             push(g, "rax");
             break;
-
         case BIN_MULTI:
             gen_expr(g, bin_expr->data.multi->rhs);
             gen_expr(g, bin_expr->data.multi->lhs);
@@ -137,7 +136,6 @@ static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
             sb_append(&g->sb, "\tmul rbx\n");
             push(g, "rax");
             break;
-
         case BIN_DIV:
             gen_expr(g, bin_expr->data.div->rhs);
             gen_expr(g, bin_expr->data.div->lhs);
@@ -146,41 +144,40 @@ static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
             sb_append(&g->sb, "\tdiv rbx\n");
             push(g, "rax");
             break;
-
         default: 
             break;
-
     }
 }
 
 static void gen_expr(Generator *g, const NodeExpr *expr) {
     switch (expr->type) {
-
         case EXPR_TERM:
             gen_term(g, expr->data.term);
             break;
-
         case EXPR_BIN:
             gen_bin_expr(g, expr->data.bin);
             break;
-
         default: 
             break;
-
     }
+}
 
+static void gen_scope(Generator *g, const NodeScope *scope) {
+    begin_scope(g);
+    for (size_t i = 0; i < scope->size; i++) {
+        gen_stmt(g, scope->stmts[i]);
+    }
+    end_scope(g);
 }
 
 static void gen_stmt(Generator *g, const NodeStmt *stmt) {
     switch (stmt->type) {
-
         case STMT_EXIT:
             gen_expr(g, stmt->data.exit->expr);
             sb_append(&g->sb, "\tmov rax, 60\n");
             pop(g, "rdi");
             sb_append(&g->sb, "\tsyscall\n");
             break;
-
         case STMT_LET:
             if (var_table_contains(&g->current_scope->vars, stmt->data.let->ident.value)) {
                 fprintf(stderr, "Identifier already used: %s\n", stmt->data.let->ident.value);
@@ -189,16 +186,18 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
             var_table_append(&g->current_scope->vars, stmt->data.let->ident.value, g->stack_size);
             gen_expr(g, stmt->data.let->expr);
             break;
-
         case STMT_SCOPE:
-            begin_scope(g);
-            NodeStmtScope *scope = stmt->data.scope;
-            for (size_t i = 0; i < scope->size; i++) {
-                gen_stmt(g, scope->stmts[i]);
-            }
-            end_scope(g);
+            gen_scope(g, stmt->data.scope);
             break;
-
+        case STMT_IF:
+            gen_expr(g, stmt->data.if_->expr);
+            pop(g, "rax");
+            sb_append(&g->sb, "\ttest rax, rax\n");
+            g->label_count++;
+            sb_append_fmt(&g->sb, "\tjz label%zu\n", g->label_count);
+            gen_scope(g, stmt->data.if_->scope);  // Scope before label since jmp zero instruction
+            sb_append_fmt(&g->sb, "label%zu:\n", g->label_count);
+            break;
         default:
             break;
     }
@@ -206,11 +205,9 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
 
 char *gen_prog(Generator *g) {
     sb_append(&g->sb, "global _start\n_start:\n");
-
     for (size_t i = 0; i < g->prog->size; i++) {
         gen_stmt(g, g->prog->stmts[i]);
     }
-
     // sb_append(g->sb,
     //     "\tmov rax, 60\n"
     //     "\tmov rdi, 0\n"
