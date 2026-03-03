@@ -12,6 +12,7 @@ typedef struct {
     size_t stack_size;
     size_t label_count;
     Scope *current_scope;
+    int nested_level;
 } Generator;
 
 void generator_init(Generator *g, const NodeProg *prog);

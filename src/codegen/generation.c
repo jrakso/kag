@@ -87,6 +87,7 @@ void generator_init(Generator *g, const NodeProg *prog) {
     g->label_count = 0;
     g->current_scope = NULL;  // Important
     begin_scope(g);
+    g->nested_level = 0;
 }
 
 void generator_free(Generator *g) {
@@ -181,7 +182,7 @@ static void gen_scope(Generator *g, const NodeScope *scope) {
     end_scope(g);
 }
 
-static void gen_if_pred(Generator *g, const NodeIfPred *pred, const char *end_label) {
+static void gen_if_pred(Generator *g, const NodeIfPred *pred, const char *end_label, size_t end_label_id) {
     if (!pred) {
         return;
     }
@@ -191,17 +192,22 @@ static void gen_if_pred(Generator *g, const NodeIfPred *pred, const char *end_la
             pop(g, "rax");
             char *label = create_label(g->label_count++);
             sb_append(&g->sb, "\ttest rax, rax\n");
-            sb_append_fmt(&g->sb, "\tjz %s\n", label);
+            sb_append_fmt(&g->sb, "\tjz %s", label);
+            sb_append_fmt(&g->sb, " ; %d level elif - end label (%zu)\n", g->nested_level - 1, end_label_id);
+            sb_append_fmt(&g->sb, "\t; %d level elif (true)\n", g->nested_level - 1);
             gen_scope(g, pred->data.elif->scope);
             sb_append_fmt(&g->sb, "\tjmp %s\n", end_label);
+            sb_append_fmt(&g->sb, "\t; %d level elif (false)\n", g->nested_level - 1);
+            sb_append_fmt(&g->sb, "%s:\n", label);
             if (pred->data.elif->pred) {
-                sb_append_fmt(&g->sb, "%s:\n", label);
-                gen_if_pred(g, pred->data.elif->pred, end_label);
+                gen_if_pred(g, pred->data.elif->pred, end_label, end_label_id);
             }
             free(label);
             break;
         }
         case IFPRED_ELSE: {
+            int level = g->nested_level - 1;
+            sb_append_fmt(&g->sb, "\t; %d level else\n", level);      
             gen_scope(g, pred->data.else_->scope);
             break;
         }
@@ -234,20 +240,28 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
             break;
         }
         case STMT_IF: {
+            int level = g->nested_level;
+            g->nested_level++;
             char *label = create_label(g->label_count++);
             gen_expr(g, stmt->data.if_->expr);
             pop(g, "rax");
             sb_append(&g->sb, "\ttest rax, rax\n");
-            sb_append_fmt(&g->sb, "\tjz %s\n", label);
+            sb_append_fmt(&g->sb, "\tjz %s", label);
+            char *end_label = create_label(g->label_count++);
+            size_t end_label_id = g->label_count - 1;
+            sb_append_fmt(&g->sb, " ; %d level if - end label (%zu)\n", level, end_label_id);
+            sb_append_fmt(&g->sb, "\t; %d level if (true)\n", level);
             gen_scope(g, stmt->data.if_->scope);
+            sb_append_fmt(&g->sb, "\tjmp %s\n", end_label);
+            sb_append_fmt(&g->sb, "\t; %d level if (false)\n", level);
             sb_append_fmt(&g->sb, "%s:\n", label);
-            free(label);
             if (stmt->data.if_->pred) {
-                char *end_label = create_label(g->label_count++);
-                gen_if_pred(g, stmt->data.if_->pred, end_label);
-                sb_append_fmt(&g->sb, "%s:\n", end_label);
-                free(end_label);
+                gen_if_pred(g, stmt->data.if_->pred, end_label, end_label_id);
             }
+            sb_append_fmt(&g->sb, "%s:\n", end_label);
+            g->nested_level--;
+            free(end_label);
+            free(label);
             break;
         }
         default: {
