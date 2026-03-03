@@ -277,6 +277,22 @@ static NodeStmt *parse_stmt(Parser *p) {
             node_stmt->data.if_ = stmt_if;
             return node_stmt;
         }
+        case TOKEN_IDENT: {
+            Token ident = parser_consume(p);
+            parser_expect(p, TOKEN_EQ, "Expected '='");
+            NodeStmtAssign *assign = arena_alloc(p->arena, sizeof(NodeStmtAssign));
+            assign->ident = ident;
+            NodeExpr *expr = parse_expr(p, 0);
+            if (!expr) {
+                fprintf(stderr, "Invalid expression\n");
+            }
+            assign->expr = expr;
+            parser_expect(p, TOKEN_SEMICOLON, "Expected ';'");
+            NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
+            node_stmt->type = STMT_ASSIGN;
+            node_stmt->data.assign = assign;
+            return node_stmt;
+        }
         case TOKEN_OPEN_CURLY: {
             NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             node_stmt->type = STMT_SCOPE;

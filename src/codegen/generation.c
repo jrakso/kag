@@ -235,6 +235,17 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
             gen_expr(g, stmt->data.let->expr);
             break;
         }
+        case STMT_ASSIGN: {
+            const Variable *var = lookup_var(g, stmt->data.assign->ident.value);
+            if (!var) {
+                fprintf(stderr, "Undeclared identifier: %s\n", stmt->data.assign->ident.value);
+                exit(EXIT_FAILURE);
+            }
+            gen_expr(g, stmt->data.assign->expr);
+            pop(g, "rax");
+            sb_append_fmt(&g->sb, "\tmov [rsp + %zu], rax\n", (g->stack_size - var->stack_loc - 1)*8);
+            break;
+        }
         case STMT_SCOPE: {
             gen_scope(g, stmt->data.scope);
             break;

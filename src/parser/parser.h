@@ -39,7 +39,8 @@ typedef enum {
     STMT_EXIT,
     STMT_LET,
     STMT_SCOPE,
-    STMT_IF
+    STMT_IF,
+    STMT_ASSIGN
 } NodeStmtType;
 
 typedef enum {
@@ -147,6 +148,11 @@ typedef struct {
     NodeIfPred *pred;
 } NodeStmtIf;
 
+typedef struct {
+    Token ident;
+    NodeExpr *expr;
+} NodeStmtAssign;
+
 struct NodeStmt {
     NodeStmtType type;
     union {
@@ -154,6 +160,7 @@ struct NodeStmt {
         NodeStmtLet *let;
         NodeScope *scope;
         NodeStmtIf *if_;
+        NodeStmtAssign *assign;
     } data;
 };
 
