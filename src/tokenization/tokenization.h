@@ -6,6 +6,7 @@
 #define START        0
 #define PEEK_CURRENT 0
 #define PEEK_NEXT    1
+#define PEEK_PREV   -1
 
 typedef enum {
     TOKEN_EOF,
@@ -30,6 +31,7 @@ typedef enum {
 
 typedef struct {
     TokenType type;
+    int line;
     char *value;
 } Token;
 
@@ -47,3 +49,4 @@ typedef struct {
 
 TokenArray tokenize(const char *src);  // caller frees with token_array_free
 void token_array_free(TokenArray *arr);  // frees tokens and token values
+char *token_type_to_string(TokenType type);

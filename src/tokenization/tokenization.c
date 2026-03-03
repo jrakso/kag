@@ -6,6 +6,49 @@
 
 #include "tokenization.h"
 
+char *token_type_to_string(TokenType type) {
+    switch (type) {
+        case TOKEN_EOF:
+            return "end of file";
+        case TOKEN_EXIT:
+            return "exit";
+        case TOKEN_INT_LITERAL:
+            return "integer literal";
+        case TOKEN_SEMICOLON:
+            return ";";
+        case TOKEN_OPEN_PAREN:
+            return "(";
+        case TOKEN_CLOSE_PAREN:
+            return ")";
+        case TOKEN_IDENT:
+            return "identifier";
+        case TOKEN_LET:
+            return "let";
+        case TOKEN_EQ:
+            return "=";
+        case TOKEN_PLUS:
+            return "+";
+        case TOKEN_MINUS:
+            return "-";
+        case TOKEN_MULTI:
+            return "*";
+        case TOKEN_FSLASH:
+            return "/";
+        case TOKEN_OPEN_CURLY:
+            return "{";
+        case TOKEN_CLOSE_CURLY:
+            return "}";
+        case TOKEN_IF:
+            return "if";
+        case TOKEN_ELIF:
+            return "elif";
+        case TOKEN_ELSE:
+            return "else";
+        default:
+            return "unknown token";
+    }
+}
+
 static void token_array_init(TokenArray *arr) {
     arr->size = 0;
     arr->capacity = 4;
@@ -68,6 +111,7 @@ TokenArray tokenize(const char *src) {
     Tokenizer t = { .src = src, .len = strlen(src), .pos = START };
     TokenArray tokens;
     token_array_init(&tokens);  // caller frees with token_array_free
+    int line_count = 1;
     while (tokenizer_peek(&t, PEEK_CURRENT) != '\0') {
         const char c = tokenizer_peek(&t, PEEK_CURRENT);
         if (isalpha(c)) {
@@ -78,22 +122,22 @@ TokenArray tokenize(const char *src) {
             size_t end = t.pos;
             char *value = copy_token_value(t.src, start, end);
             if (strcmp(value, "exit") == 0) {
-                token_array_append(&tokens, (Token){ .type = TOKEN_EXIT, .value = NULL });
+                token_array_append(&tokens, (Token){ .type = TOKEN_EXIT, .line = line_count, .value = NULL });
                 free(value);  // prevent leak
             } else if (strcmp(value, "let") == 0) {
-                token_array_append(&tokens, (Token){ .type = TOKEN_LET, .value = NULL });
+                token_array_append(&tokens, (Token){ .type = TOKEN_LET, .line = line_count, .value = NULL });
                 free(value);  // prevent leak)
             } else if (strcmp(value, "if") == 0) {
-                token_array_append(&tokens, (Token){ .type = TOKEN_IF, .value = NULL });
+                token_array_append(&tokens, (Token){ .type = TOKEN_IF, .line = line_count, .value = NULL });
                 free(value);  // prevent leak)
             } else if (strcmp(value, "elif") == 0) {
-                token_array_append(&tokens, (Token){ .type = TOKEN_ELIF, .value = NULL });
+                token_array_append(&tokens, (Token){ .type = TOKEN_ELIF, .line = line_count, .value = NULL });
                 free(value);  // prevent leak)
             } else if (strcmp(value, "else") == 0) {
-                token_array_append(&tokens, (Token){ .type = TOKEN_ELSE, .value = NULL });
+                token_array_append(&tokens, (Token){ .type = TOKEN_ELSE, .line = line_count, .value = NULL });
                 free(value);  // prevent leak)
             } else {
-                token_array_append(&tokens, (Token){ .type = TOKEN_IDENT, .value = value });
+                token_array_append(&tokens, (Token){ .type = TOKEN_IDENT, .line = line_count, .value = value });
             }
         }
         else if (isdigit(c)) {
@@ -103,7 +147,7 @@ TokenArray tokenize(const char *src) {
                 tokenizer_consume(&t);
             size_t end = t.pos;
             char *value = copy_token_value(t.src, start, end);
-            token_array_append(&tokens, (Token){ .type = TOKEN_INT_LITERAL, .value = value });
+            token_array_append(&tokens, (Token){ .type = TOKEN_INT_LITERAL, .line = line_count, .value = value });
         }
         else if (c == '/' && tokenizer_peek(&t, PEEK_NEXT) == '/') {
             tokenizer_consume(&t);
@@ -114,50 +158,53 @@ TokenArray tokenize(const char *src) {
         }
         else if (c == '(') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_PAREN, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_PAREN, .line = line_count, .value = NULL });
         }
         else if (c == ')') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_PAREN, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_PAREN, .line = line_count, .value = NULL });
         }
         else if (c == '=') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_EQ, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_EQ, .line = line_count, .value = NULL });
         }
         else if (c == '+') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_PLUS, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_PLUS, .line = line_count, .value = NULL });
         }
         else if (c == '-') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_MINUS, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_MINUS, .line = line_count, .value = NULL });
         }
         else if (c == '*') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_MULTI, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_MULTI, .line = line_count, .value = NULL });
         }
         else if (c == '/') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_FSLASH, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_FSLASH, .line = line_count, .value = NULL });
         }
         else if (c == ';') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_SEMICOLON, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_SEMICOLON, .line = line_count, .value = NULL });
         }
         else if (c == '{') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_CURLY, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_CURLY, .line = line_count, .value = NULL });
         }
         else if (c == '}') {
             tokenizer_consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_CURLY, .value = NULL });
+            token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_CURLY, .line = line_count, .value = NULL });
+        }
+        else if (c == '\n') {
+            tokenizer_consume(&t);
+            line_count++;
         }
         else if (isspace(c)) {
             tokenizer_consume(&t);
         }
         else {
-            fprintf(stderr, "Unexpected character '%c' at index %zu\n",
-                    tokenizer_peek(&t, PEEK_CURRENT), t.pos);
+            fprintf(stderr, "line %d: tokenizer error: invalid token '%c'\n", line_count, tokenizer_peek(&t, PEEK_CURRENT));
             token_array_free(&tokens);
             exit(EXIT_FAILURE);
         }

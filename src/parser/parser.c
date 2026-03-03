@@ -20,7 +20,7 @@ void parser_free(Parser *p) {
     arena_destroy(p->arena);
 }
 
-static Token parser_peek(const Parser *p, size_t offset) {
+static Token parser_peek(const Parser *p, int offset) {
     if (p->pos + offset >= p->size) {
         return (Token) { .type = TOKEN_EOF };
     }
@@ -31,12 +31,20 @@ static Token parser_consume(Parser *p) {
     return p->tokens[p->pos++];
 }
 
-static Token parser_expect(Parser *p, TokenType type, const char *err) {
+static void parser_error(Parser *p, const char *msg) {
+    Token t = parser_peek(p, PEEK_PREV);
+    fprintf(stderr, "line %d: parser error: expected %s\n", t.line, msg);
+    exit(EXIT_FAILURE);
+}
+
+static Token parser_expect(Parser *p, TokenType type) {
     if (parser_peek(p, PEEK_CURRENT).type == type) {
         return parser_consume(p);
     } else {
-        fprintf(stderr, "%s", err);
-        exit(EXIT_FAILURE);
+        char msg[128];
+        snprintf(msg, sizeof(msg), "'%s'", token_type_to_string(type));
+        parser_error(p, msg);
+        return (Token){0}; // unreachable
     }
 }
 
@@ -62,10 +70,9 @@ static NodeTerm *parse_term(Parser *p) {
             parser_consume(p);
             NodeExpr *expr = parse_expr(p, 0);
             if (!expr) {
-                fprintf(stderr, "Expected expression\n");
-                exit(EXIT_FAILURE);
+                parser_error(p, "expression");
             }
-            parser_expect(p, TOKEN_CLOSE_PAREN, "Expected ')'");
+            parser_expect(p, TOKEN_CLOSE_PAREN);
             NodeTermParen *term_paren = arena_alloc(p->arena, sizeof(NodeTermParen));
             term_paren->expr = expr;
             NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
@@ -111,8 +118,7 @@ static NodeExpr *parse_expr(Parser *p, int min_prec) {
         Token op = parser_consume(p);
         NodeExpr *expr_rhs = parse_expr(p, prec + 1);
         if (!expr_rhs) {
-            fprintf(stderr, "Unable to parse expression\n");
-            exit(EXIT_FAILURE);
+            parser_error(p, "expression");
         }
         NodeBinExpr *bin_expr = arena_alloc(p->arena, sizeof(NodeBinExpr));
         switch (op.type) {
@@ -149,8 +155,7 @@ static NodeExpr *parse_expr(Parser *p, int min_prec) {
                 break;
             }
             default: {
-                fprintf(stderr, "Invalid binary operator\n");
-                exit(EXIT_FAILURE);
+                parser_error(p, "valid binary operator");
             }
         }
         NodeExpr *new_expr = arena_alloc(p->arena, sizeof(NodeExpr));
@@ -162,7 +167,7 @@ static NodeExpr *parse_expr(Parser *p, int min_prec) {
 }
 
 static NodeScope *parse_scope(Parser *p) {
-    parser_expect(p, TOKEN_OPEN_CURLY, "Expected '{'");
+    parser_expect(p, TOKEN_OPEN_CURLY);
     NodeScope *scope = arena_alloc(p->arena, sizeof(NodeScope));
     scope->size = 0;
     scope->capacity = 4;
@@ -171,8 +176,7 @@ static NodeScope *parse_scope(Parser *p) {
             parser_peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
         NodeStmt *stmt = parse_stmt(p);
         if (!stmt) {
-            fprintf(stderr, "Invalid statement\n");
-            exit(EXIT_FAILURE);
+            parser_error(p, "statement");
         }
         if (scope->size == scope->capacity) {
             size_t new_capacity = scope->capacity * 2;
@@ -185,7 +189,7 @@ static NodeScope *parse_scope(Parser *p) {
         }
         scope->stmts[scope->size++] = stmt;
     }
-    parser_expect(p, TOKEN_CLOSE_CURLY, "Expected '}'\n");
+    parser_expect(p, TOKEN_CLOSE_CURLY);
     return scope;
 }
 
@@ -194,14 +198,13 @@ static NodeIfPred *parse_if_pred(Parser *p) {
     switch (t.type) {
         case TOKEN_ELIF: {
             parser_consume(p);
-            parser_expect(p, TOKEN_OPEN_PAREN, "Expected '('");
+            parser_expect(p, TOKEN_OPEN_PAREN);
             NodeIfPredElif *elif = arena_alloc(p->arena, sizeof(NodeIfPredElif));
             elif->expr = parse_expr(p, 0);
             if (!elif->expr) {
-                fprintf(stderr, "Expected expression\n");
-                exit(EXIT_FAILURE);           
+                parser_error(p, "expression");         
             }
-            parser_expect(p, TOKEN_CLOSE_PAREN, "Expected ')'");
+            parser_expect(p, TOKEN_CLOSE_PAREN);
             elif->scope = parse_scope(p);
             elif->pred = parse_if_pred(p);  // Recursion
             NodeIfPred *pred = arena_alloc(p->arena, sizeof(NodeIfPred));
@@ -232,15 +235,14 @@ static NodeStmt *parse_stmt(Parser *p) {
             NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             node_stmt->type = STMT_EXIT;
             node_stmt->data.exit = arena_alloc(p->arena, sizeof(NodeStmtExit));
-            parser_expect(p, TOKEN_OPEN_PAREN, "Expected '('\n");
+            parser_expect(p, TOKEN_OPEN_PAREN);
             NodeExpr *node_expr = parse_expr(p, 0);
             if (!node_expr) { 
-                fprintf(stderr, "Invalid expression\n");
-                exit(EXIT_FAILURE);
+                parser_error(p, "expression");
             }
             node_stmt->data.exit->expr = node_expr; 
-            parser_expect(p, TOKEN_CLOSE_PAREN, "Expected ')'\n");
-            parser_expect(p, TOKEN_SEMICOLON, "Expected ';'\n");
+            parser_expect(p, TOKEN_CLOSE_PAREN);
+            parser_expect(p, TOKEN_SEMICOLON);
             return node_stmt;
         }
         case TOKEN_LET: {
@@ -248,28 +250,26 @@ static NodeStmt *parse_stmt(Parser *p) {
             NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             node_stmt->type = STMT_LET;
             node_stmt->data.let = arena_alloc(p->arena, sizeof(NodeStmtLet));
-            node_stmt->data.let->ident = parser_expect(p, TOKEN_IDENT, "Expected Identifier\n");
-            parser_expect(p, TOKEN_EQ, "Expected '='\n");
+            node_stmt->data.let->ident = parser_expect(p, TOKEN_IDENT);
+            parser_expect(p, TOKEN_EQ);
             NodeExpr *node_expr = parse_expr(p, 0);
             if (!node_expr) {
-                fprintf(stderr, "Invalid expression\n");
-                exit(EXIT_FAILURE);
+                parser_error(p, "expression");
             }
             node_stmt->data.let->expr = node_expr;
-            parser_expect(p, TOKEN_SEMICOLON, "Expected ';'\n");
+            parser_expect(p, TOKEN_SEMICOLON);
             return node_stmt;
         }
         case TOKEN_IF: {
             parser_consume(p);
-            parser_expect(p, TOKEN_OPEN_PAREN, "Expected '('");
+            parser_expect(p, TOKEN_OPEN_PAREN);
             NodeStmtIf *stmt_if = arena_alloc(p->arena, sizeof(NodeStmtIf));            
             NodeExpr *node_expr = parse_expr(p, 0);
             if (!node_expr) {
-                fprintf(stderr, "Invalid expression\n");
-                exit(EXIT_FAILURE);
+                parser_error(p, "expression");
             }
             stmt_if->expr = node_expr;
-            parser_expect(p, TOKEN_CLOSE_PAREN, "Expected ')'");
+            parser_expect(p, TOKEN_CLOSE_PAREN);
             stmt_if->scope = parse_scope(p);
             stmt_if->pred = parse_if_pred(p);
             NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
@@ -279,15 +279,15 @@ static NodeStmt *parse_stmt(Parser *p) {
         }
         case TOKEN_IDENT: {
             Token ident = parser_consume(p);
-            parser_expect(p, TOKEN_EQ, "Expected '='");
+            parser_expect(p, TOKEN_EQ);
             NodeStmtAssign *assign = arena_alloc(p->arena, sizeof(NodeStmtAssign));
             assign->ident = ident;
             NodeExpr *expr = parse_expr(p, 0);
             if (!expr) {
-                fprintf(stderr, "Invalid expression\n");
+                parser_error(p, "expression");
             }
             assign->expr = expr;
-            parser_expect(p, TOKEN_SEMICOLON, "Expected ';'");
+            parser_expect(p, TOKEN_SEMICOLON);
             NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             node_stmt->type = STMT_ASSIGN;
             node_stmt->data.assign = assign;
@@ -317,8 +317,7 @@ NodeProg parse_prog(Parser *p) {
     while (parser_peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
         NodeStmt *stmt = parse_stmt(p);
         if (!stmt) {
-            fprintf(stderr, "Invalid statement\n");
-            exit(EXIT_FAILURE);
+            parser_error(p, "statement");
         }
         if (prog.size == prog.capacity) {
             size_t new_capacity = prog.capacity * 2;
