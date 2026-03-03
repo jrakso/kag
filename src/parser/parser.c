@@ -162,6 +162,7 @@ static NodeExpr *parse_expr(Parser *p, int min_prec) {
 }
 
 static NodeScope *parse_scope(Parser *p) {
+    parser_expect(p, TOKEN_OPEN_CURLY, "Expected '{'");
     NodeScope *scope = arena_alloc(p->arena, sizeof(NodeScope));
     scope->size = 0;
     scope->capacity = 4;
@@ -186,6 +187,41 @@ static NodeScope *parse_scope(Parser *p) {
     }
     parser_expect(p, TOKEN_CLOSE_CURLY, "Expected '}'\n");
     return scope;
+}
+
+static NodeIfPred *parse_if_pred(Parser *p) {
+    const Token t = parser_peek(p, PEEK_CURRENT);
+    switch (t.type) {
+        case TOKEN_ELIF: {
+            parser_consume(p);
+            parser_expect(p, TOKEN_OPEN_PAREN, "Expected '('");
+            NodeIfPredElif *elif = arena_alloc(p->arena, sizeof(NodeIfPredElif));
+            elif->expr = parse_expr(p, 0);
+            if (!elif->expr) {
+                fprintf(stderr, "Expected expression\n");
+                exit(EXIT_FAILURE);           
+            }
+            parser_expect(p, TOKEN_CLOSE_PAREN, "Expected ')'");
+            elif->scope = parse_scope(p);
+            elif->pred = parse_if_pred(p);  // Recursion
+            NodeIfPred *pred = arena_alloc(p->arena, sizeof(NodeIfPred));
+            pred->type = IFPRED_ELIF;
+            pred->data.elif = elif; 
+            return pred;
+        }
+        case TOKEN_ELSE: {
+            parser_consume(p);
+            NodeIfPredElse *else_ = arena_alloc(p->arena, sizeof(NodeIfPredElse));
+            else_->scope = parse_scope(p);
+            NodeIfPred *pred = arena_alloc(p->arena, sizeof(NodeIfPred));
+            pred->type = IFPRED_ELSE;
+            pred->data.else_ = else_; 
+            return pred;
+        }
+        default: {
+            return NULL;
+        }
+    }
 }
 
 static NodeStmt *parse_stmt(Parser *p) {
@@ -234,18 +270,17 @@ static NodeStmt *parse_stmt(Parser *p) {
             }
             stmt_if->expr = node_expr;
             parser_expect(p, TOKEN_CLOSE_PAREN, "Expected ')'");
-            parser_expect(p, TOKEN_OPEN_CURLY, "Expected '{'");
             stmt_if->scope = parse_scope(p);
+            stmt_if->pred = parse_if_pred(p);
             NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             node_stmt->type = STMT_IF;
             node_stmt->data.if_ = stmt_if;
             return node_stmt;
         }
         case TOKEN_OPEN_CURLY: {
-            parser_consume(p);
             NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             node_stmt->type = STMT_SCOPE;
-            node_stmt->data.scope = parse_scope(p);
+            node_stmt->data.scope = parse_scope(p);  // Consumes open curly
             return node_stmt;
         }
         default: {

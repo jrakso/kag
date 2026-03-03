@@ -23,7 +23,9 @@ typedef enum {
     TOKEN_FSLASH,
     TOKEN_OPEN_CURLY,
     TOKEN_CLOSE_CURLY,
-    TOKEN_IF
+    TOKEN_IF,
+    TOKEN_ELIF,
+    TOKEN_ELSE
 } TokenType;
 
 typedef struct {

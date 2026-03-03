@@ -19,7 +19,6 @@ void var_table_free(VariableTable *vt) {
     for (size_t i = 0; i < vt->size; i++) {
         free(vt->vars[i].name);
     }
-
     free(vt->vars);
     vt->vars = NULL;
     vt->size = 0;
@@ -35,7 +34,6 @@ void var_table_append(VariableTable *vt, const char *name, size_t stack_size) {
             exit(EXIT_FAILURE);
         }
     }
-
     vt->vars[vt->size].name = strdup(name);
     vt->vars[vt->size].stack_loc = stack_size;
     vt->size++;

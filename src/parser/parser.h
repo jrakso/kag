@@ -12,6 +12,7 @@ typedef struct NodeBinExprAdd NodeBinExprAdd;
 typedef struct NodeBinExprSub NodeBinExprSub;
 typedef struct NodeStmt NodeStmt;
 typedef struct NodeTerm NodeTerm;
+typedef struct NodeIfPred NodeIfPred;
 
 // ─── Enums ─────────────────────────────────────────────
 typedef enum {
@@ -40,6 +41,11 @@ typedef enum {
     STMT_SCOPE,
     STMT_IF
 } NodeStmtType;
+
+typedef enum {
+    IFPRED_ELIF,
+    IFPRED_ELSE,
+} NodeIfPredType;
 
 // ─── Expression Nodes ──────────────────────────────────
 typedef struct {
@@ -120,6 +126,25 @@ typedef struct {
 typedef struct {
     NodeExpr *expr;
     NodeScope *scope;
+    NodeIfPred *pred;
+} NodeIfPredElif;
+
+typedef struct {
+    NodeScope *scope;
+} NodeIfPredElse;
+
+struct NodeIfPred {
+    NodeIfPredType type;
+    union {
+        NodeIfPredElif *elif;
+        NodeIfPredElse *else_;
+    } data;
+};
+
+typedef struct {
+    NodeExpr *expr;
+    NodeScope *scope;
+    NodeIfPred *pred;
 } NodeStmtIf;
 
 struct NodeStmt {

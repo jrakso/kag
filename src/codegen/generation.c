@@ -54,11 +54,22 @@ static void end_scope(Generator *g) {
     free(s);
 }
 
-// static char *create_label(Generator *g) {
-//     g->sb.
-// }
+static char *create_label(size_t label_id) {
+    int len = snprintf(NULL, 0, "label%zu", label_id);
+    if (len < 0) {
+        fprintf(stderr, "snprintf formatting error\n");
+        exit(EXIT_FAILURE);
+    }
+    char *label = malloc(len + 1);
+    if (!label) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+    snprintf(label, len + 1, "label%zu", label_id);
+    return label;  // Caller frees
+}
 
-static Variable *lookup_var(Generator *g, const char *name) {
+static const Variable *lookup_var(Generator *g, const char *name) {
     Scope *s = g->current_scope;
     while (s) {
         Variable *var = var_table_find(&s->vars, name);
@@ -93,7 +104,7 @@ static void gen_term(Generator *g, const NodeTerm *term) {
             break;
         }
         case TERM_IDENT: {
-            Variable *var = lookup_var(g, term->data.ident->ident.value);
+            const Variable *var = lookup_var(g, term->data.ident->ident.value);
             if (!var) {
                 fprintf(stderr, "Undeclared identifier: %s\n", term->data.ident->ident.value);
                 exit(EXIT_FAILURE);
@@ -170,15 +181,46 @@ static void gen_scope(Generator *g, const NodeScope *scope) {
     end_scope(g);
 }
 
+static void gen_if_pred(Generator *g, const NodeIfPred *pred, const char *end_label) {
+    if (!pred) {
+        return;
+    }
+    switch (pred->type) {
+        case IFPRED_ELIF: {
+            gen_expr(g, pred->data.elif->expr);
+            pop(g, "rax");
+            char *label = create_label(g->label_count++);
+            sb_append(&g->sb, "\ttest rax, rax\n");
+            sb_append_fmt(&g->sb, "\tjz %s\n", label);
+            gen_scope(g, pred->data.elif->scope);
+            sb_append_fmt(&g->sb, "\tjmp %s\n", end_label);
+            if (pred->data.elif->pred) {
+                sb_append_fmt(&g->sb, "%s:\n", label);
+                gen_if_pred(g, pred->data.elif->pred, end_label);
+            }
+            free(label);
+            break;
+        }
+        case IFPRED_ELSE: {
+            gen_scope(g, pred->data.else_->scope);
+            break;
+        }
+        default: {
+            break;
+        }
+    } 
+}
+
 static void gen_stmt(Generator *g, const NodeStmt *stmt) {
     switch (stmt->type) {
-        case STMT_EXIT:
+        case STMT_EXIT: {
             gen_expr(g, stmt->data.exit->expr);
             sb_append(&g->sb, "\tmov rax, 60\n");
             pop(g, "rdi");
             sb_append(&g->sb, "\tsyscall\n");
             break;
-        case STMT_LET:
+        }
+        case STMT_LET: {
             if (var_table_contains(&g->current_scope->vars, stmt->data.let->ident.value)) {
                 fprintf(stderr, "Identifier already used: %s\n", stmt->data.let->ident.value);
                 exit(EXIT_FAILURE);
@@ -186,20 +228,31 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
             var_table_append(&g->current_scope->vars, stmt->data.let->ident.value, g->stack_size);
             gen_expr(g, stmt->data.let->expr);
             break;
-        case STMT_SCOPE:
+        }
+        case STMT_SCOPE: {
             gen_scope(g, stmt->data.scope);
             break;
-        case STMT_IF:
-            size_t label_id = g->label_count++;
+        }
+        case STMT_IF: {
+            char *label = create_label(g->label_count++);
             gen_expr(g, stmt->data.if_->expr);
             pop(g, "rax");
             sb_append(&g->sb, "\ttest rax, rax\n");
-            sb_append_fmt(&g->sb, "\tjz label%zu\n", label_id);
-            gen_scope(g, stmt->data.if_->scope);  // Scope before label since jmp zero instruction
-            sb_append_fmt(&g->sb, "label%zu:\n", label_id);
+            sb_append_fmt(&g->sb, "\tjz %s\n", label);
+            gen_scope(g, stmt->data.if_->scope);
+            sb_append_fmt(&g->sb, "%s:\n", label);
+            free(label);
+            if (stmt->data.if_->pred) {
+                char *end_label = create_label(g->label_count++);
+                gen_if_pred(g, stmt->data.if_->pred, end_label);
+                sb_append_fmt(&g->sb, "%s:\n", end_label);
+                free(end_label);
+            }
             break;
-        default:
+        }
+        default: {
             break;
+        }
     }
 }
 

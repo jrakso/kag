@@ -86,6 +86,12 @@ TokenArray tokenize(const char *src) {
             } else if (strcmp(value, "if") == 0) {
                 token_array_append(&tokens, (Token){ .type = TOKEN_IF, .value = NULL });
                 free(value);  // prevent leak)
+            } else if (strcmp(value, "elif") == 0) {
+                token_array_append(&tokens, (Token){ .type = TOKEN_ELIF, .value = NULL });
+                free(value);  // prevent leak)
+            } else if (strcmp(value, "else") == 0) {
+                token_array_append(&tokens, (Token){ .type = TOKEN_ELSE, .value = NULL });
+                free(value);  // prevent leak)
             } else {
                 token_array_append(&tokens, (Token){ .type = TOKEN_IDENT, .value = value });
             }
