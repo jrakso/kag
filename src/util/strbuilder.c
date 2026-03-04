@@ -7,6 +7,10 @@
 
 #define SB_INITIAL_CAP 128
 
+/* ------------------------------------------------ */
+/* StringBuilder helpers */
+/* ------------------------------------------------ */
+
 static void sb_reserve(StringBuilder *sb, size_t extra) {
     if (sb->len + extra + 1 > sb->capacity) {
         while (sb->len + extra + 1 > sb->capacity)
@@ -20,6 +24,10 @@ static void sb_reserve(StringBuilder *sb, size_t extra) {
         sb->data = new_data;
     }
 }
+
+/* ------------------------------------------------ */
+/* StringBuilder API */
+/* ------------------------------------------------ */
 
 void sb_init(StringBuilder *sb) {
     sb->capacity = SB_INITIAL_CAP;

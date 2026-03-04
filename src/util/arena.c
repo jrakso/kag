@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+/* ------------------------------------------------ */
+/* Arena API */
+/* ------------------------------------------------ */
+
 void arena_init(Arena *arena, size_t size) {
     arena->base = malloc(size);
     if (!arena->base) {

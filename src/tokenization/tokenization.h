@@ -48,5 +48,5 @@ typedef struct {
 } Tokenizer;
 
 TokenArray tokenize(const char *src);  // caller frees with token_array_free
-void token_array_free(TokenArray *arr);  // frees tokens and token values
+void token_array_free(TokenArray *tokens);  // frees tokens and token values
 char *token_type_to_string(TokenType type);
