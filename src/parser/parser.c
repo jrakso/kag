@@ -8,7 +8,7 @@ static NodeExpr *parse_expr(Parser *p, int min_bp);
 static NodeStmt *parse_stmt(Parser *p);
 
 /* ------------------------------------------------ */
-/* Parser utilities */
+/* Parser helpers */
 /* ------------------------------------------------ */
 
 void parser_init(Parser *p, const TokenArray *tokens, Arena *arena) {
@@ -47,7 +47,7 @@ static Token parser_expect(Parser *p, TokenType type) {
 }
 
 /* ------------------------------------------------ */
-/* Pratt expression parsing */
+/* Expression parsing (pratt) */
 /* ------------------------------------------------ */
 
 static bool infix_binding_power(TokenType type, int *left_bp, int *right_bp) {
@@ -349,7 +349,7 @@ void parse_prog(Parser *p, NodeProg *prog) {
 }
 
 /* ------------------------------------------------ */
-/* API */
+/* Parser API */
 /* ------------------------------------------------ */
 
 NodeProg parse(const TokenArray *tokens, Arena *arena) {
