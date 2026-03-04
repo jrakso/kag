@@ -1,17 +1,19 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
 
 #include "parser.h"
 #include "tokenization/tokenization.h"
 
-static NodeExpr *parse_expr(Parser *p, int min_prec);
+static NodeExpr *parse_expr(Parser *p, int min_bp);
 static NodeStmt *parse_stmt(Parser *p);
 
-void parser_init(Parser *p, const TokenArray *arr, Arena *arena) {
-    p->tokens = arr->tokens;
-    p->size = arr->size;
+/* ------------------------------------------------ */
+/* Parser utilities */
+/* ------------------------------------------------ */
+
+void parser_init(Parser *p, const TokenArray *tokens, Arena *arena) {
+    p->tokens = tokens->tokens;
+    p->size = tokens->size;
     p->pos = 0;
     p->arena = arena;
 }
@@ -28,8 +30,8 @@ static Token parser_consume(Parser *p) {
 }
 
 static void parser_error(Parser *p, const char *msg) {
-    Token t = parser_peek(p, PEEK_PREV);
-    fprintf(stderr, "line %d: parser error: expected %s\n", t.line, msg);
+    Token tok = parser_peek(p, PEEK_PREV);
+    fprintf(stderr, "line %d: parser error: expected %s\n", tok.line, msg);
     exit(EXIT_FAILURE);
 }
 
@@ -44,23 +46,97 @@ static Token parser_expect(Parser *p, TokenType type) {
     }
 }
 
-static NodeTerm *parse_term(Parser *p) {
-    switch (parser_peek(p, PEEK_CURRENT).type) {
+/* ------------------------------------------------ */
+/* Pratt expression parsing */
+/* ------------------------------------------------ */
+
+static bool infix_binding_power(TokenType type, int *left_bp, int *right_bp) {
+    switch (type) {
+        case TOKEN_PLUS:
+        case TOKEN_MINUS:
+            *left_bp = 1;
+            *right_bp = 2;
+            return true;
+        case TOKEN_MULTI:
+        case TOKEN_FSLASH:
+            *left_bp = 3;
+            *right_bp = 4;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static NodeExpr *make_bin_expr(Parser *p, TokenType op, NodeExpr *lhs, NodeExpr *rhs) {
+    NodeBinExpr *bin = arena_alloc(p->arena, sizeof(NodeBinExpr));
+    switch (op) {
+        case TOKEN_PLUS: {
+            NodeBinExprAdd *add = arena_alloc(p->arena, sizeof(NodeBinExprAdd));
+            add->lhs = lhs;
+            add->rhs = rhs;
+            bin->type = BIN_ADD;
+            bin->data.add = add;
+            break;
+        }
+        case TOKEN_MINUS: {
+            NodeBinExprSub *sub = arena_alloc(p->arena, sizeof(NodeBinExprSub));
+            sub->lhs = lhs;
+            sub->rhs = rhs;
+            bin->type = BIN_SUB;
+            bin->data.sub = sub;
+            break;
+        }
+        case TOKEN_MULTI: {
+            NodeBinExprMulti *multi = arena_alloc(p->arena, sizeof(NodeBinExprMulti));
+            multi->lhs = lhs;
+            multi->rhs = rhs;
+            bin->type = BIN_MULTI;
+            bin->data.multi = multi;
+            break;
+        }
+        case TOKEN_FSLASH: {
+            NodeBinExprDiv *div = arena_alloc(p->arena, sizeof(NodeBinExprDiv));
+            div->lhs = lhs;
+            div->rhs = rhs;
+            bin->type = BIN_DIV;
+            bin->data.div = div;
+            break;
+        }
+        default:
+            parser_error(p, "binary operator");
+    }
+    NodeExpr *expr = arena_alloc(p->arena, sizeof(NodeExpr));
+    expr->type = EXPR_BIN;
+    expr->data.bin = bin;
+    return expr;
+}
+
+static NodeExpr *parse_prefix(Parser *p) {
+    Token tok = parser_peek(p, PEEK_CURRENT);
+    switch (tok.type) {
         case TOKEN_INT_LITERAL: {
-            NodeTermIntLit *term_int_lit = arena_alloc(p->arena, sizeof(NodeTermIntLit));
-            term_int_lit->int_lit = parser_consume(p);
+            parser_consume(p);
+            NodeTermIntLit *lit = arena_alloc(p->arena, sizeof(NodeTermIntLit));
+            lit->int_lit = tok;
             NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
             term->type = TERM_INT_LIT;
-            term->data.int_lit = term_int_lit;
-            return term;
+            term->data.int_lit = lit;
+            NodeExpr *expr = arena_alloc(p->arena, sizeof(NodeExpr));
+            expr->type = EXPR_TERM;
+            expr->data.term = term;
+            return expr;
         }
         case TOKEN_IDENT: {
-            NodeTermIdent *term_ident = arena_alloc(p->arena, sizeof(NodeTermIdent));
-            term_ident->ident = parser_consume(p);
+            parser_consume(p);
+            NodeTermIdent *ident = arena_alloc(p->arena, sizeof(NodeTermIdent));
+            ident->ident = tok;
             NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
             term->type = TERM_IDENT;
-            term->data.ident = term_ident;
-            return term;
+            term->data.ident = ident;
+            NodeExpr *expr = arena_alloc(p->arena, sizeof(NodeExpr));
+            expr->type = EXPR_TERM;
+            expr->data.term = term;
+            return expr;
         }
         case TOKEN_OPEN_PAREN: {
             parser_consume(p);
@@ -69,98 +145,36 @@ static NodeTerm *parse_term(Parser *p) {
                 parser_error(p, "expression");
             }
             parser_expect(p, TOKEN_CLOSE_PAREN);
-            NodeTermParen *term_paren = arena_alloc(p->arena, sizeof(NodeTermParen));
-            term_paren->expr = expr;
-            NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
-            term->type = TERM_PAREN;
-            term->data.paren = term_paren;
-            return term;
+            return expr;
         }
-        default: {
-            return NULL;
-        }
-    }
-}
-
-static int bin_prec(TokenType type) {
-    switch (type) {
-        case TOKEN_PLUS:
-            return 0;
-        case TOKEN_MINUS:
-            return 0;
-        case TOKEN_MULTI:
-            return 1;
-        case TOKEN_FSLASH:
-            return 1;
         default:
-            return -1;
+            parser_error(p, "expression");
+            return NULL;
     }
 }
 
-static NodeExpr *parse_expr(Parser *p, int min_prec) {
-    NodeTerm *term_lhs = parse_term(p);
-    if (!term_lhs) {
-        return NULL;
-    }
-    NodeExpr *expr_lhs = arena_alloc(p->arena, sizeof(NodeExpr));
-    expr_lhs->type = EXPR_TERM;
-    expr_lhs->data.term = term_lhs;
+static NodeExpr *parse_expr(Parser *p, int min_bp) {
+    NodeExpr *lhs = parse_prefix(p);
     while (true) {
-        Token curr_tok = parser_peek(p, PEEK_CURRENT);
-        int prec = bin_prec(curr_tok.type);
-        if (prec < min_prec) {
+        Token tok = parser_peek(p, PEEK_CURRENT);
+        int lbp = 0;
+        int rbp = 0;
+        if (!infix_binding_power(tok.type, &lbp, &rbp) || lbp < min_bp) {
             break;
         }
-        Token op = parser_consume(p);
-        NodeExpr *expr_rhs = parse_expr(p, prec + 1);
-        if (!expr_rhs) {
+        parser_consume(p);
+        NodeExpr *rhs = parse_expr(p, rbp);
+        if (!rhs) {
             parser_error(p, "expression");
         }
-        NodeBinExpr *bin_expr = arena_alloc(p->arena, sizeof(NodeBinExpr));
-        switch (op.type) {
-            case TOKEN_PLUS: {
-                NodeBinExprAdd *bin_expr_add = arena_alloc(p->arena, sizeof(NodeBinExprAdd));
-                bin_expr_add->lhs = expr_lhs;
-                bin_expr_add->rhs = expr_rhs;
-                bin_expr->type = BIN_ADD;
-                bin_expr->data.add = bin_expr_add;
-                break;
-            }
-            case TOKEN_MINUS: {
-                NodeBinExprSub *bin_expr_sub = arena_alloc(p->arena, sizeof(NodeBinExprSub));
-                bin_expr_sub->lhs = expr_lhs;
-                bin_expr_sub->rhs = expr_rhs;
-                bin_expr->type = BIN_SUB;
-                bin_expr->data.sub = bin_expr_sub;
-                break;
-            }
-            case TOKEN_MULTI: {
-                NodeBinExprMulti *bin_expr_multi = arena_alloc(p->arena, sizeof(NodeBinExprMulti));
-                bin_expr_multi->lhs = expr_lhs;
-                bin_expr_multi->rhs = expr_rhs;
-                bin_expr->type = BIN_MULTI;
-                bin_expr->data.multi = bin_expr_multi;
-                break;
-            }
-            case TOKEN_FSLASH: {
-                NodeBinExprDiv *bin_expr_div = arena_alloc(p->arena, sizeof(NodeBinExprDiv));
-                bin_expr_div->lhs = expr_lhs;
-                bin_expr_div->rhs = expr_rhs;
-                bin_expr->type = BIN_DIV;
-                bin_expr->data.div = bin_expr_div;
-                break;
-            }
-            default: {
-                parser_error(p, "valid binary operator");
-            }
-        }
-        NodeExpr *new_expr = arena_alloc(p->arena, sizeof(NodeExpr));
-        new_expr->type = EXPR_BIN;
-        new_expr->data.bin = bin_expr;
-        expr_lhs = new_expr;
+        lhs = make_bin_expr(p, tok.type, lhs, rhs);
     }
-    return expr_lhs;
+    return lhs;
 }
+
+/* ------------------------------------------------ */
+/* Scope parsing */
+/* ------------------------------------------------ */
 
 static NodeScope *parse_scope(Parser *p) {
     parser_expect(p, TOKEN_OPEN_CURLY);
@@ -189,9 +203,13 @@ static NodeScope *parse_scope(Parser *p) {
     return scope;
 }
 
+/* ------------------------------------------------ */
+/* If predicate parsing */
+/* ------------------------------------------------ */
+
 static NodeIfPred *parse_if_pred(Parser *p) {
-    const Token t = parser_peek(p, PEEK_CURRENT);
-    switch (t.type) {
+    const Token tok = parser_peek(p, PEEK_CURRENT);
+    switch (tok.type) {
         case TOKEN_ELIF: {
             parser_consume(p);
             parser_expect(p, TOKEN_OPEN_PAREN);
@@ -223,77 +241,82 @@ static NodeIfPred *parse_if_pred(Parser *p) {
     }
 }
 
+/* ------------------------------------------------ */
+/* Statement parsing */
+/* ------------------------------------------------ */
+
 static NodeStmt *parse_stmt(Parser *p) {
-    const Token t = parser_peek(p, PEEK_CURRENT);
-    switch (t.type) {
+    const Token tok = parser_peek(p, PEEK_CURRENT);
+    switch (tok.type) {
         case TOKEN_EXIT: {
             parser_consume(p);
-            NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
-            node_stmt->type = STMT_EXIT;
-            node_stmt->data.exit = arena_alloc(p->arena, sizeof(NodeStmtExit));
             parser_expect(p, TOKEN_OPEN_PAREN);
-            NodeExpr *node_expr = parse_expr(p, 0);
-            if (!node_expr) { 
+            NodeExpr *expr = parse_expr(p, 0);
+            if (!expr) { 
                 parser_error(p, "expression");
             }
-            node_stmt->data.exit->expr = node_expr; 
             parser_expect(p, TOKEN_CLOSE_PAREN);
             parser_expect(p, TOKEN_SEMICOLON);
-            return node_stmt;
+            NodeStmt *stmt = arena_alloc(p->arena, sizeof(NodeStmt));
+            stmt->type = STMT_EXIT;
+            stmt->data.exit = arena_alloc(p->arena, sizeof(NodeStmtExit));
+            stmt->data.exit->expr = expr; 
+            return stmt;
         }
         case TOKEN_LET: {
             parser_consume(p);
-            NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
-            node_stmt->type = STMT_LET;
-            node_stmt->data.let = arena_alloc(p->arena, sizeof(NodeStmtLet));
-            node_stmt->data.let->ident = parser_expect(p, TOKEN_IDENT);
+            Token ident = parser_expect(p, TOKEN_IDENT);
             parser_expect(p, TOKEN_EQ);
-            NodeExpr *node_expr = parse_expr(p, 0);
-            if (!node_expr) {
-                parser_error(p, "expression");
-            }
-            node_stmt->data.let->expr = node_expr;
-            parser_expect(p, TOKEN_SEMICOLON);
-            return node_stmt;
-        }
-        case TOKEN_IF: {
-            parser_consume(p);
-            parser_expect(p, TOKEN_OPEN_PAREN);
-            NodeStmtIf *stmt_if = arena_alloc(p->arena, sizeof(NodeStmtIf));            
-            NodeExpr *node_expr = parse_expr(p, 0);
-            if (!node_expr) {
-                parser_error(p, "expression");
-            }
-            stmt_if->expr = node_expr;
-            parser_expect(p, TOKEN_CLOSE_PAREN);
-            stmt_if->scope = parse_scope(p);
-            stmt_if->pred = parse_if_pred(p);
-            NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
-            node_stmt->type = STMT_IF;
-            node_stmt->data.if_ = stmt_if;
-            return node_stmt;
-        }
-        case TOKEN_IDENT: {
-            Token ident = parser_consume(p);
-            parser_expect(p, TOKEN_EQ);
-            NodeStmtAssign *assign = arena_alloc(p->arena, sizeof(NodeStmtAssign));
-            assign->ident = ident;
             NodeExpr *expr = parse_expr(p, 0);
             if (!expr) {
                 parser_error(p, "expression");
             }
-            assign->expr = expr;
+            NodeStmt *stmt = arena_alloc(p->arena, sizeof(NodeStmt));
+            stmt->type = STMT_LET;
+            stmt->data.let = arena_alloc(p->arena, sizeof(NodeStmtLet));
+            stmt->data.let->ident = ident;
+            stmt->data.let->expr = expr;
             parser_expect(p, TOKEN_SEMICOLON);
-            NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
-            node_stmt->type = STMT_ASSIGN;
-            node_stmt->data.assign = assign;
-            return node_stmt;
+            return stmt;
+        }
+        case TOKEN_IF: {
+            parser_consume(p);
+            parser_expect(p, TOKEN_OPEN_PAREN);           
+            NodeExpr *expr = parse_expr(p, 0);
+            if (!expr) {
+                parser_error(p, "expression");
+            }
+            parser_expect(p, TOKEN_CLOSE_PAREN);
+            NodeStmtIf *if_ = arena_alloc(p->arena, sizeof(NodeStmtIf));
+            if_->expr = expr; 
+            if_->scope = parse_scope(p);
+            if_->pred = parse_if_pred(p);
+            NodeStmt *stmt = arena_alloc(p->arena, sizeof(NodeStmt));
+            stmt->type = STMT_IF;
+            stmt->data.if_ = if_;
+            return stmt;
+        }
+        case TOKEN_IDENT: {
+            Token ident = parser_consume(p);
+            parser_expect(p, TOKEN_EQ);
+            NodeExpr *expr = parse_expr(p, 0);
+            if (!expr) {
+                parser_error(p, "expression");
+            }
+            parser_expect(p, TOKEN_SEMICOLON);
+            NodeStmtAssign *assign = arena_alloc(p->arena, sizeof(NodeStmtAssign));
+            assign->ident = ident;
+            assign->expr = expr;
+            NodeStmt *stmt = arena_alloc(p->arena, sizeof(NodeStmt));
+            stmt->type = STMT_ASSIGN;
+            stmt->data.assign = assign;
+            return stmt;
         }
         case TOKEN_OPEN_CURLY: {
-            NodeStmt *node_stmt = arena_alloc(p->arena, sizeof(NodeStmt));
-            node_stmt->type = STMT_SCOPE;
-            node_stmt->data.scope = parse_scope(p);  // Consumes open curly
-            return node_stmt;
+            NodeStmt *stmt = arena_alloc(p->arena, sizeof(NodeStmt));
+            stmt->type = STMT_SCOPE;
+            stmt->data.scope = parse_scope(p);  // Consumes open curly
+            return stmt;
         }
         default: {
             return NULL;
@@ -301,6 +324,10 @@ static NodeStmt *parse_stmt(Parser *p) {
 
     }
 }
+
+/* ------------------------------------------------ */
+/* Program parsing */
+/* ------------------------------------------------ */
 
 void parse_prog(Parser *p, NodeProg *prog) {
     while (parser_peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
@@ -320,6 +347,10 @@ void parse_prog(Parser *p, NodeProg *prog) {
         prog->stmts[prog->size++] = stmt;
     }
 }
+
+/* ------------------------------------------------ */
+/* API */
+/* ------------------------------------------------ */
 
 NodeProg parse(const TokenArray *tokens, Arena *arena) {
     if (!tokens || !arena) {
