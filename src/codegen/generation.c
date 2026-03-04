@@ -12,6 +12,16 @@ typedef struct Scope {
     struct Scope *parent;
 } Scope;
 
+typedef struct {
+    const NodeProg *prog;
+    StringBuilder text;  // instructions
+    StringBuilder data;
+    size_t stack_size;
+    size_t label_count;
+    Scope *current_scope;
+    int nested_level;
+} Generator;
+
 static void gen_expr(Generator *g, const NodeExpr *expr);
 static void gen_stmt(Generator *g, const NodeStmt *stmt);
 static void begin_scope(Generator *g);
@@ -24,15 +34,15 @@ static void end_scope(Generator *g);
 static void push(Generator *g, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    sb_append(g->sb, "\tpush ");
-    sb_append_fmtv(g->sb, fmt, args);
-    sb_append(g->sb, "\n");
+    sb_append(&g->text, "\tpush ");
+    sb_append_fmtv(&g->text, fmt, args);
+    sb_append(&g->text, "\n");
     va_end(args);
     g->stack_size++;
 }
 
 static void pop(Generator *g, const char *reg) {
-    sb_append_fmt(g->sb, "\tpop %s\n", reg);
+    sb_append_fmt(&g->text, "\tpop %s\n", reg);
     g->stack_size--;
 }
 
@@ -62,9 +72,10 @@ static const Variable *lookup_var(Generator *g, const char *name) {
     return NULL;
 }
 
-static void generator_init(Generator *g, const NodeProg *prog, StringBuilder *sb) {
+static void generator_init(Generator *g, const NodeProg *prog) {
     g->prog = prog;
-    g->sb = sb;
+    sb_init(&g->text);
+    sb_init(&g->data);
     g->stack_size = 0;
     g->label_count = 0;
     g->current_scope = NULL;  // Important
@@ -76,6 +87,8 @@ static void generator_free(Generator *g) {
     while (g->current_scope) {
         end_scope(g);
     }
+    sb_free(&g->data);
+    sb_free(&g->text);
 }
 
 /* ------------------------------------------------ */
@@ -85,8 +98,18 @@ static void generator_free(Generator *g) {
 static void gen_term(Generator *g, const NodeTerm *term) {
     switch (term->type) {      
         case TERM_INT_LIT: {
-            sb_append_fmt(g->sb, "\tmov rax, %s\n", term->data.int_lit->int_lit.value);
+            sb_append_fmt(&g->text, "\tmov rax, %s\n", term->data.int_lit->int_lit.value);
             push(g, "rax");
+            break;
+        }
+        case TERM_STRING_LIT: {
+            char *label = create_label(g->label_count++);
+            // store string in data section
+            sb_append_fmt(&g->data, "%s: db \"%s\", 0\n", label, term->data.string_lit->string_lit.value);
+            // push pointer
+            sb_append_fmt(&g->text, "\tlea rax, [rel %s]\n", label);
+            push(g, "rax");
+            free(label);
             break;
         }
         case TERM_IDENT: {
@@ -118,7 +141,7 @@ static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
             gen_expr(g, bin_expr->data.add->lhs);
             pop(g, "rax");
             pop(g, "rbx");
-            sb_append(g->sb, "\tadd rax, rbx\n");
+            sb_append(&g->text, "\tadd rax, rbx\n");
             push(g, "rax");
             break;
         case BIN_SUB:
@@ -126,7 +149,7 @@ static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
             gen_expr(g, bin_expr->data.sub->lhs);
             pop(g, "rax");
             pop(g, "rbx");
-            sb_append(g->sb, "\tsub rax, rbx\n");
+            sb_append(&g->text, "\tsub rax, rbx\n");
             push(g, "rax");
             break;
         case BIN_MULTI:
@@ -134,7 +157,7 @@ static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
             gen_expr(g, bin_expr->data.multi->lhs);
             pop(g, "rax");
             pop(g, "rbx");
-            sb_append(g->sb, "\tmul rbx\n");
+            sb_append(&g->text, "\tmul rbx\n");
             push(g, "rax");
             break;
         case BIN_DIV:
@@ -142,7 +165,7 @@ static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
             gen_expr(g, bin_expr->data.div->lhs);
             pop(g, "rax");
             pop(g, "rbx");
-            sb_append(g->sb, "\tdiv rbx\n");
+            sb_append(&g->text, "\tdiv rbx\n");
             push(g, "rax");
             break;
         default: 
@@ -187,7 +210,7 @@ static void end_scope(Generator *g) {
     Scope *s = g->current_scope;
     size_t locals = g->stack_size - s->base_stack_size;
     if (locals > 0) {
-        sb_append_fmt(g->sb, "\tadd rsp, %zu\n", locals * 8);
+        sb_append_fmt(&g->text, "\tadd rsp, %zu\n", locals * 8);
         g->stack_size = s->base_stack_size;
     }
     g->current_scope = s->parent;
@@ -216,14 +239,14 @@ static void gen_if_chain(Generator *g, const NodeIfPred *pred, const char *end_l
             gen_expr(g, pred->data.elif->expr);
             pop(g, "rax");
             char *label = create_label(g->label_count++);
-            sb_append(g->sb, "\ttest rax, rax\n");
-            sb_append_fmt(g->sb, "\tjz %s", label);
-            sb_append_fmt(g->sb, " ; %d level elif - end label (%zu)\n", g->nested_level - 1, end_label_id);
-            sb_append_fmt(g->sb, "\t; %d level elif (true)\n", g->nested_level - 1);
+            sb_append(&g->text, "\ttest rax, rax\n");
+            sb_append_fmt(&g->text, "\tjz %s", label);
+            sb_append_fmt(&g->text, " ; %d level elif - end label (%zu)\n", g->nested_level - 1, end_label_id);
+            sb_append_fmt(&g->text, "\t; %d level elif (true)\n", g->nested_level - 1);
             gen_scope(g, pred->data.elif->scope);
-            sb_append_fmt(g->sb, "\tjmp %s\n", end_label);
-            sb_append_fmt(g->sb, "\t; %d level elif (false)\n", g->nested_level - 1);
-            sb_append_fmt(g->sb, "%s:\n", label);
+            sb_append_fmt(&g->text, "\tjmp %s\n", end_label);
+            sb_append_fmt(&g->text, "\t; %d level elif (false)\n", g->nested_level - 1);
+            sb_append_fmt(&g->text, "%s:\n", label);
             if (pred->data.elif->pred) {
                 gen_if_chain(g, pred->data.elif->pred, end_label, end_label_id);
             }
@@ -232,7 +255,7 @@ static void gen_if_chain(Generator *g, const NodeIfPred *pred, const char *end_l
         }
         case IFPRED_ELSE: {
             int level = g->nested_level - 1;
-            sb_append_fmt(g->sb, "\t; %d level else\n", level);      
+            sb_append_fmt(&g->text, "\t; %d level else\n", level);      
             gen_scope(g, pred->data.else_->scope);
             break;
         }
@@ -250,9 +273,9 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
     switch (stmt->type) {
         case STMT_EXIT: {
             gen_expr(g, stmt->data.exit->expr);
-            sb_append(g->sb, "\tmov rax, 60\n");
+            sb_append(&g->text, "\tmov rax, 60\n");
             pop(g, "rdi");
-            sb_append(g->sb, "\tsyscall\n");
+            sb_append(&g->text, "\tsyscall\n");
             break;
         }
         case STMT_LET: {
@@ -272,7 +295,7 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
             }
             gen_expr(g, stmt->data.assign->expr);
             pop(g, "rax");
-            sb_append_fmt(g->sb, "\tmov [rsp + %zu], rax\n", (g->stack_size - var->stack_loc - 1)*8);
+            sb_append_fmt(&g->text, "\tmov [rsp + %zu], rax\n", (g->stack_size - var->stack_loc - 1)*8);
             break;
         }
         case STMT_SCOPE: {
@@ -285,20 +308,20 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
             char *label = create_label(g->label_count++);
             gen_expr(g, stmt->data.if_->expr);
             pop(g, "rax");
-            sb_append(g->sb, "\ttest rax, rax\n");
-            sb_append_fmt(g->sb, "\tjz %s", label);
+            sb_append(&g->text, "\ttest rax, rax\n");
+            sb_append_fmt(&g->text, "\tjz %s", label);
             char *end_label = create_label(g->label_count++);
             size_t end_label_id = g->label_count - 1;
-            sb_append_fmt(g->sb, " ; %d level if - end label (%zu)\n", level, end_label_id);
-            sb_append_fmt(g->sb, "\t; %d level if (true)\n", level);
+            sb_append_fmt(&g->text, " ; %d level if - end label (%zu)\n", level, end_label_id);
+            sb_append_fmt(&g->text, "\t; %d level if (true)\n", level);
             gen_scope(g, stmt->data.if_->scope);
-            sb_append_fmt(g->sb, "\tjmp %s\n", end_label);
-            sb_append_fmt(g->sb, "\t; %d level if (false)\n", level);
-            sb_append_fmt(g->sb, "%s:\n", label);
+            sb_append_fmt(&g->text, "\tjmp %s\n", end_label);
+            sb_append_fmt(&g->text, "\t; %d level if (false)\n", level);
+            sb_append_fmt(&g->text, "%s:\n", label);
             if (stmt->data.if_->pred) {
                 gen_if_chain(g, stmt->data.if_->pred, end_label, end_label_id);
             }
-            sb_append_fmt(g->sb, "%s:\n", end_label);
+            sb_append_fmt(&g->text, "%s:\n", end_label);
             g->nested_level--;
             free(end_label);
             free(label);
@@ -315,12 +338,11 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
 /* ------------------------------------------------ */
 
 static void gen_prog(Generator *g) {
-    sb_append(g->sb, "global _start\n_start:\n");
     for (size_t i = 0; i < g->prog->size; i++) {
         gen_stmt(g, g->prog->stmts[i]);
     }
     // Default exit
-    sb_append(g->sb,
+    sb_append(&g->text,
         "\tmov rax, 60\n"
         "\tmov rdi, 0\n"
         "\tsyscall\n");
@@ -331,11 +353,16 @@ static void gen_prog(Generator *g) {
 /* ------------------------------------------------ */
 
 StringBuilder generate(const NodeProg *prog) {
+    Generator g;
+    generator_init(&g, prog);
+    gen_prog(&g);
     StringBuilder sb;
     sb_init(&sb);
-    Generator g;
-    generator_init(&g, prog, &sb);
-    gen_prog(&g);
+    sb_append(&sb, "section .data\n");
+    sb_append(&sb, g.data.data);
+    sb_append(&sb, "\nsection .text\n");
+    sb_append(&sb, "global _start\n_start:\n");    
+    sb_append(&sb, g.text.data);
     generator_free(&g);
     return sb;
 }

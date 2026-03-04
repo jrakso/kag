@@ -116,11 +116,23 @@ static NodeExpr *parse_prefix(Parser *p) {
     switch (tok.type) {
         case TOKEN_INT_LITERAL: {
             consume(p);
-            NodeTermIntLit *lit = arena_alloc(p->arena, sizeof(NodeTermIntLit));
-            lit->int_lit = tok;
+            NodeTermIntLit *int_lit = arena_alloc(p->arena, sizeof(NodeTermIntLit));
+            int_lit->int_lit = tok;
             NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
             term->type = TERM_INT_LIT;
-            term->data.int_lit = lit;
+            term->data.int_lit = int_lit;
+            NodeExpr *expr = arena_alloc(p->arena, sizeof(NodeExpr));
+            expr->type = EXPR_TERM;
+            expr->data.term = term;
+            return expr;
+        }
+        case TOKEN_STRING_LITERAL: {
+            consume(p);
+            NodeTermStringLit *string_lit = arena_alloc(p->arena, sizeof(NodeTermStringLit));
+            string_lit->string_lit = tok;
+            NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
+            term->type = TERM_STRING_LIT;
+            term->data.string_lit = string_lit;
             NodeExpr *expr = arena_alloc(p->arena, sizeof(NodeExpr));
             expr->type = EXPR_TERM;
             expr->data.term = term;
@@ -141,9 +153,6 @@ static NodeExpr *parse_prefix(Parser *p) {
         case TOKEN_OPEN_PAREN: {
             consume(p);
             NodeExpr *expr = parse_expr(p, 0);
-            if (!expr) {
-                error(p, "expression");
-            }
             expect(p, TOKEN_CLOSE_PAREN);
             return expr;
         }
@@ -164,9 +173,6 @@ static NodeExpr *parse_expr(Parser *p, int min_bp) {
         }
         consume(p);
         NodeExpr *rhs = parse_expr(p, rbp);
-        if (!rhs) {
-            error(p, "expression");
-        }
         lhs = make_bin_expr(p, tok.type, lhs, rhs);
     }
     return lhs;
@@ -185,9 +191,6 @@ static NodeScope *parse_scope(Parser *p) {
     while (peek(p, PEEK_CURRENT).type != TOKEN_CLOSE_CURLY &&
             peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
         NodeStmt *stmt = parse_stmt(p);
-        if (!stmt) {
-            error(p, "statement");
-        }
         if (scope->size == scope->capacity) {
             size_t new_capacity = scope->capacity * 2;
             NodeStmt **new_array = arena_alloc(p->arena, new_capacity * sizeof(NodeStmt *));
@@ -215,9 +218,6 @@ static NodeIfPred *parse_if_pred(Parser *p) {
             expect(p, TOKEN_OPEN_PAREN);
             NodeIfPredElif *elif = arena_alloc(p->arena, sizeof(NodeIfPredElif));
             elif->expr = parse_expr(p, 0);
-            if (!elif->expr) {
-                error(p, "expression");         
-            }
             expect(p, TOKEN_CLOSE_PAREN);
             elif->scope = parse_scope(p);
             elif->pred = parse_if_pred(p);  // Recursion
@@ -252,9 +252,6 @@ static NodeStmt *parse_stmt(Parser *p) {
             consume(p);
             expect(p, TOKEN_OPEN_PAREN);
             NodeExpr *expr = parse_expr(p, 0);
-            if (!expr) { 
-                error(p, "expression");
-            }
             expect(p, TOKEN_CLOSE_PAREN);
             expect(p, TOKEN_SEMICOLON);
             NodeStmt *stmt = arena_alloc(p->arena, sizeof(NodeStmt));
@@ -268,9 +265,6 @@ static NodeStmt *parse_stmt(Parser *p) {
             Token ident = expect(p, TOKEN_IDENT);
             expect(p, TOKEN_EQ);
             NodeExpr *expr = parse_expr(p, 0);
-            if (!expr) {
-                error(p, "expression");
-            }
             expect(p, TOKEN_SEMICOLON);
             NodeStmt *stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             stmt->type = STMT_LET;
@@ -283,9 +277,6 @@ static NodeStmt *parse_stmt(Parser *p) {
             consume(p);
             expect(p, TOKEN_OPEN_PAREN);           
             NodeExpr *expr = parse_expr(p, 0);
-            if (!expr) {
-                error(p, "expression");
-            }
             expect(p, TOKEN_CLOSE_PAREN);
             NodeStmtIf *if_ = arena_alloc(p->arena, sizeof(NodeStmtIf));
             if_->expr = expr; 
@@ -300,9 +291,6 @@ static NodeStmt *parse_stmt(Parser *p) {
             Token ident = consume(p);
             expect(p, TOKEN_EQ);
             NodeExpr *expr = parse_expr(p, 0);
-            if (!expr) {
-                error(p, "expression");
-            }
             expect(p, TOKEN_SEMICOLON);
             NodeStmtAssign *assign = arena_alloc(p->arena, sizeof(NodeStmtAssign));
             assign->ident = ident;
@@ -319,6 +307,7 @@ static NodeStmt *parse_stmt(Parser *p) {
             return stmt;
         }
         default: {
+            error(p, "statement");
             return NULL;
         }
 
@@ -332,9 +321,6 @@ static NodeStmt *parse_stmt(Parser *p) {
 void parse_prog(Parser *p, NodeProg *prog) {
     while (peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
         NodeStmt *stmt = parse_stmt(p);
-        if (!stmt) {
-            error(p, "statement");
-        }
         if (prog->size == prog->capacity) {
             size_t new_capacity = prog->capacity * 2;
             NodeStmt **new_array = arena_alloc(p->arena, new_capacity * sizeof(NodeStmt *));

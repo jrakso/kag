@@ -109,7 +109,24 @@ TokenArray tokenize(const char *src) {
             size_t end = t.pos;
             char *value = slice_string(t.src, start, end);
             token_array_append(&tokens, (Token){ .type = TOKEN_INT_LITERAL, .line = line_count, .value = value });
-        } 
+        }
+
+        else if (c == '"') {
+            consume(&t);
+            size_t start = t.pos;
+            while (peek(&t, PEEK_CURRENT) != '\0' && peek(&t, PEEK_CURRENT) != '\n' && peek(&t, PEEK_CURRENT) != '"') {
+                consume(&t);
+            }
+            if (peek(&t, PEEK_CURRENT) != '"') {
+                fprintf(stderr, "line %d: tokenizer error: unterminated string literal\n", line_count);
+                token_array_free(&tokens);
+                exit(EXIT_FAILURE);
+            }
+            size_t end = t.pos;
+            consume(&t);
+            char *value = slice_string(t.src, start, end);
+            token_array_append(&tokens, (Token){ .type = TOKEN_STRING_LITERAL, .line = line_count, .value = value });
+        }
         
         else if (c == '/' && peek(&t, PEEK_NEXT) == '/') {
             consume(&t);
