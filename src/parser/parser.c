@@ -11,37 +11,37 @@ static NodeStmt *parse_stmt(Parser *p);
 /* Parser helpers */
 /* ------------------------------------------------ */
 
-void parser_init(Parser *p, const TokenArray *tokens, Arena *arena) {
+static void parser_init(Parser *p, const TokenArray *tokens, Arena *arena) {
     p->tokens = tokens->tokens;
     p->size = tokens->size;
     p->pos = 0;
     p->arena = arena;
 }
 
-static Token parser_peek(const Parser *p, int offset) {
+static Token peek(const Parser *p, int offset) {
     if (p->pos + offset >= p->size) {
         return (Token) { .type = TOKEN_EOF };
     }
     return p->tokens[p->pos + offset];
 }
 
-static Token parser_consume(Parser *p) {
+static Token consume(Parser *p) {
     return p->tokens[p->pos++];
 }
 
-static void parser_error(Parser *p, const char *msg) {
-    Token tok = parser_peek(p, PEEK_PREV);
+static void error(Parser *p, const char *msg) {
+    Token tok = peek(p, PEEK_PREV);
     fprintf(stderr, "line %d: parser error: expected %s\n", tok.line, msg);
     exit(EXIT_FAILURE);
 }
 
-static Token parser_expect(Parser *p, TokenType type) {
-    if (parser_peek(p, PEEK_CURRENT).type == type) {
-        return parser_consume(p);
+static Token expect(Parser *p, TokenType type) {
+    if (peek(p, PEEK_CURRENT).type == type) {
+        return consume(p);
     } else {
         char msg[128];
         snprintf(msg, sizeof(msg), "'%s'", token_type_to_string(type));
-        parser_error(p, msg);
+        error(p, msg);
         return (Token){0}; // unreachable
     }
 }
@@ -103,7 +103,7 @@ static NodeExpr *make_bin_expr(Parser *p, TokenType op, NodeExpr *lhs, NodeExpr 
             break;
         }
         default:
-            parser_error(p, "binary operator");
+            error(p, "binary operator");
     }
     NodeExpr *expr = arena_alloc(p->arena, sizeof(NodeExpr));
     expr->type = EXPR_BIN;
@@ -112,10 +112,10 @@ static NodeExpr *make_bin_expr(Parser *p, TokenType op, NodeExpr *lhs, NodeExpr 
 }
 
 static NodeExpr *parse_prefix(Parser *p) {
-    Token tok = parser_peek(p, PEEK_CURRENT);
+    Token tok = peek(p, PEEK_CURRENT);
     switch (tok.type) {
         case TOKEN_INT_LITERAL: {
-            parser_consume(p);
+            consume(p);
             NodeTermIntLit *lit = arena_alloc(p->arena, sizeof(NodeTermIntLit));
             lit->int_lit = tok;
             NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
@@ -127,7 +127,7 @@ static NodeExpr *parse_prefix(Parser *p) {
             return expr;
         }
         case TOKEN_IDENT: {
-            parser_consume(p);
+            consume(p);
             NodeTermIdent *ident = arena_alloc(p->arena, sizeof(NodeTermIdent));
             ident->ident = tok;
             NodeTerm *term = arena_alloc(p->arena, sizeof(NodeTerm));
@@ -139,16 +139,16 @@ static NodeExpr *parse_prefix(Parser *p) {
             return expr;
         }
         case TOKEN_OPEN_PAREN: {
-            parser_consume(p);
+            consume(p);
             NodeExpr *expr = parse_expr(p, 0);
             if (!expr) {
-                parser_error(p, "expression");
+                error(p, "expression");
             }
-            parser_expect(p, TOKEN_CLOSE_PAREN);
+            expect(p, TOKEN_CLOSE_PAREN);
             return expr;
         }
         default:
-            parser_error(p, "expression");
+            error(p, "expression");
             return NULL;
     }
 }
@@ -156,16 +156,16 @@ static NodeExpr *parse_prefix(Parser *p) {
 static NodeExpr *parse_expr(Parser *p, int min_bp) {
     NodeExpr *lhs = parse_prefix(p);
     while (true) {
-        Token tok = parser_peek(p, PEEK_CURRENT);
+        Token tok = peek(p, PEEK_CURRENT);
         int lbp = 0;
         int rbp = 0;
         if (!infix_binding_power(tok.type, &lbp, &rbp) || lbp < min_bp) {
             break;
         }
-        parser_consume(p);
+        consume(p);
         NodeExpr *rhs = parse_expr(p, rbp);
         if (!rhs) {
-            parser_error(p, "expression");
+            error(p, "expression");
         }
         lhs = make_bin_expr(p, tok.type, lhs, rhs);
     }
@@ -177,16 +177,16 @@ static NodeExpr *parse_expr(Parser *p, int min_bp) {
 /* ------------------------------------------------ */
 
 static NodeScope *parse_scope(Parser *p) {
-    parser_expect(p, TOKEN_OPEN_CURLY);
+    expect(p, TOKEN_OPEN_CURLY);
     NodeScope *scope = arena_alloc(p->arena, sizeof(NodeScope));
     scope->size = 0;
     scope->capacity = 4;
     scope->stmts = arena_alloc(p->arena, scope->capacity * sizeof(NodeStmt *));
-    while (parser_peek(p, PEEK_CURRENT).type != TOKEN_CLOSE_CURLY &&
-            parser_peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
+    while (peek(p, PEEK_CURRENT).type != TOKEN_CLOSE_CURLY &&
+            peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
         NodeStmt *stmt = parse_stmt(p);
         if (!stmt) {
-            parser_error(p, "statement");
+            error(p, "statement");
         }
         if (scope->size == scope->capacity) {
             size_t new_capacity = scope->capacity * 2;
@@ -199,7 +199,7 @@ static NodeScope *parse_scope(Parser *p) {
         }
         scope->stmts[scope->size++] = stmt;
     }
-    parser_expect(p, TOKEN_CLOSE_CURLY);
+    expect(p, TOKEN_CLOSE_CURLY);
     return scope;
 }
 
@@ -208,17 +208,17 @@ static NodeScope *parse_scope(Parser *p) {
 /* ------------------------------------------------ */
 
 static NodeIfPred *parse_if_pred(Parser *p) {
-    const Token tok = parser_peek(p, PEEK_CURRENT);
+    const Token tok = peek(p, PEEK_CURRENT);
     switch (tok.type) {
         case TOKEN_ELIF: {
-            parser_consume(p);
-            parser_expect(p, TOKEN_OPEN_PAREN);
+            consume(p);
+            expect(p, TOKEN_OPEN_PAREN);
             NodeIfPredElif *elif = arena_alloc(p->arena, sizeof(NodeIfPredElif));
             elif->expr = parse_expr(p, 0);
             if (!elif->expr) {
-                parser_error(p, "expression");         
+                error(p, "expression");         
             }
-            parser_expect(p, TOKEN_CLOSE_PAREN);
+            expect(p, TOKEN_CLOSE_PAREN);
             elif->scope = parse_scope(p);
             elif->pred = parse_if_pred(p);  // Recursion
             NodeIfPred *pred = arena_alloc(p->arena, sizeof(NodeIfPred));
@@ -227,7 +227,7 @@ static NodeIfPred *parse_if_pred(Parser *p) {
             return pred;
         }
         case TOKEN_ELSE: {
-            parser_consume(p);
+            consume(p);
             NodeIfPredElse *else_ = arena_alloc(p->arena, sizeof(NodeIfPredElse));
             else_->scope = parse_scope(p);
             NodeIfPred *pred = arena_alloc(p->arena, sizeof(NodeIfPred));
@@ -246,17 +246,17 @@ static NodeIfPred *parse_if_pred(Parser *p) {
 /* ------------------------------------------------ */
 
 static NodeStmt *parse_stmt(Parser *p) {
-    const Token tok = parser_peek(p, PEEK_CURRENT);
+    const Token tok = peek(p, PEEK_CURRENT);
     switch (tok.type) {
         case TOKEN_EXIT: {
-            parser_consume(p);
-            parser_expect(p, TOKEN_OPEN_PAREN);
+            consume(p);
+            expect(p, TOKEN_OPEN_PAREN);
             NodeExpr *expr = parse_expr(p, 0);
             if (!expr) { 
-                parser_error(p, "expression");
+                error(p, "expression");
             }
-            parser_expect(p, TOKEN_CLOSE_PAREN);
-            parser_expect(p, TOKEN_SEMICOLON);
+            expect(p, TOKEN_CLOSE_PAREN);
+            expect(p, TOKEN_SEMICOLON);
             NodeStmt *stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             stmt->type = STMT_EXIT;
             stmt->data.exit = arena_alloc(p->arena, sizeof(NodeStmtExit));
@@ -264,29 +264,29 @@ static NodeStmt *parse_stmt(Parser *p) {
             return stmt;
         }
         case TOKEN_LET: {
-            parser_consume(p);
-            Token ident = parser_expect(p, TOKEN_IDENT);
-            parser_expect(p, TOKEN_EQ);
+            consume(p);
+            Token ident = expect(p, TOKEN_IDENT);
+            expect(p, TOKEN_EQ);
             NodeExpr *expr = parse_expr(p, 0);
             if (!expr) {
-                parser_error(p, "expression");
+                error(p, "expression");
             }
+            expect(p, TOKEN_SEMICOLON);
             NodeStmt *stmt = arena_alloc(p->arena, sizeof(NodeStmt));
             stmt->type = STMT_LET;
             stmt->data.let = arena_alloc(p->arena, sizeof(NodeStmtLet));
             stmt->data.let->ident = ident;
             stmt->data.let->expr = expr;
-            parser_expect(p, TOKEN_SEMICOLON);
             return stmt;
         }
         case TOKEN_IF: {
-            parser_consume(p);
-            parser_expect(p, TOKEN_OPEN_PAREN);           
+            consume(p);
+            expect(p, TOKEN_OPEN_PAREN);           
             NodeExpr *expr = parse_expr(p, 0);
             if (!expr) {
-                parser_error(p, "expression");
+                error(p, "expression");
             }
-            parser_expect(p, TOKEN_CLOSE_PAREN);
+            expect(p, TOKEN_CLOSE_PAREN);
             NodeStmtIf *if_ = arena_alloc(p->arena, sizeof(NodeStmtIf));
             if_->expr = expr; 
             if_->scope = parse_scope(p);
@@ -297,13 +297,13 @@ static NodeStmt *parse_stmt(Parser *p) {
             return stmt;
         }
         case TOKEN_IDENT: {
-            Token ident = parser_consume(p);
-            parser_expect(p, TOKEN_EQ);
+            Token ident = consume(p);
+            expect(p, TOKEN_EQ);
             NodeExpr *expr = parse_expr(p, 0);
             if (!expr) {
-                parser_error(p, "expression");
+                error(p, "expression");
             }
-            parser_expect(p, TOKEN_SEMICOLON);
+            expect(p, TOKEN_SEMICOLON);
             NodeStmtAssign *assign = arena_alloc(p->arena, sizeof(NodeStmtAssign));
             assign->ident = ident;
             assign->expr = expr;
@@ -330,10 +330,10 @@ static NodeStmt *parse_stmt(Parser *p) {
 /* ------------------------------------------------ */
 
 void parse_prog(Parser *p, NodeProg *prog) {
-    while (parser_peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
+    while (peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
         NodeStmt *stmt = parse_stmt(p);
         if (!stmt) {
-            parser_error(p, "statement");
+            error(p, "statement");
         }
         if (prog->size == prog->capacity) {
             size_t new_capacity = prog->capacity * 2;

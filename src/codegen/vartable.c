@@ -5,6 +5,10 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+/* ------------------------------------------------ */
+/* VariableTable API */
+/* ------------------------------------------------ */
+
 void var_table_init(VariableTable *vt) {
   vt->capacity = 4;
   vt->size = 0;

@@ -6,8 +6,20 @@
 #include "generation.h"
 #include "vartable.h"
 
+typedef struct Scope {
+    VariableTable vars;
+    size_t base_stack_size;
+    struct Scope *parent;
+} Scope;
+
 static void gen_expr(Generator *g, const NodeExpr *expr);
 static void gen_stmt(Generator *g, const NodeStmt *stmt);
+static void begin_scope(Generator *g);
+static void end_scope(Generator *g);
+
+/* ------------------------------------------------ */
+/* Generator helpers */
+/* ------------------------------------------------ */
 
 static void push(Generator *g, const char *fmt, ...) {
     va_list args;
@@ -22,36 +34,6 @@ static void push(Generator *g, const char *fmt, ...) {
 static void pop(Generator *g, const char *reg) {
     sb_append_fmt(g->sb, "\tpop %s\n", reg);
     g->stack_size--;
-}
-
-typedef struct Scope {
-    VariableTable vars;
-    size_t base_stack_size;
-    struct Scope *parent;
-} Scope;
-
-static void begin_scope(Generator *g) {
-    Scope *s = malloc(sizeof(Scope));
-    if (!s) {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
-    var_table_init(&s->vars);
-    s->base_stack_size = g->stack_size;
-    s->parent = g->current_scope;
-    g->current_scope = s;
-}
-
-static void end_scope(Generator *g) {
-    Scope *s = g->current_scope;
-    size_t locals = g->stack_size - s->base_stack_size;
-    if (locals > 0) {
-        sb_append_fmt(g->sb, "\tadd rsp, %zu\n", locals * 8);
-        g->stack_size = s->base_stack_size;
-    }
-    g->current_scope = s->parent;
-    var_table_free(&s->vars);
-    free(s);
 }
 
 static char *create_label(size_t label_id) {
@@ -80,7 +62,7 @@ static const Variable *lookup_var(Generator *g, const char *name) {
     return NULL;
 }
 
-void generator_init(Generator *g, const NodeProg *prog, StringBuilder *sb) {
+static void generator_init(Generator *g, const NodeProg *prog, StringBuilder *sb) {
     g->prog = prog;
     g->sb = sb;
     g->stack_size = 0;
@@ -90,11 +72,15 @@ void generator_init(Generator *g, const NodeProg *prog, StringBuilder *sb) {
     g->nested_level = 0;
 }
 
-void generator_free(Generator *g) {
+static void generator_free(Generator *g) {
     while (g->current_scope) {
         end_scope(g);
     }
 }
+
+/* ------------------------------------------------ */
+/* Term generation */
+/* ------------------------------------------------ */
 
 static void gen_term(Generator *g, const NodeTerm *term) {
     switch (term->type) {      
@@ -120,6 +106,10 @@ static void gen_term(Generator *g, const NodeTerm *term) {
             break;
     }
 }
+
+/* ------------------------------------------------ */
+/* Binary expression generation */
+/* ------------------------------------------------ */
 
 static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
     switch (bin_expr->type) {
@@ -160,6 +150,10 @@ static void gen_bin_expr(Generator *g, const NodeBinExpr *bin_expr) {
     }
 }
 
+/* ------------------------------------------------ */
+/* Expression generation */
+/* ------------------------------------------------ */
+
 static void gen_expr(Generator *g, const NodeExpr *expr) {
     switch (expr->type) {
         case EXPR_TERM:
@@ -173,6 +167,34 @@ static void gen_expr(Generator *g, const NodeExpr *expr) {
     }
 }
 
+/* ------------------------------------------------ */
+/* Scope generation */
+/* ------------------------------------------------ */
+
+static void begin_scope(Generator *g) {
+    Scope *s = malloc(sizeof(Scope));
+    if (!s) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+    var_table_init(&s->vars);
+    s->base_stack_size = g->stack_size;
+    s->parent = g->current_scope;
+    g->current_scope = s;
+}
+
+static void end_scope(Generator *g) {
+    Scope *s = g->current_scope;
+    size_t locals = g->stack_size - s->base_stack_size;
+    if (locals > 0) {
+        sb_append_fmt(g->sb, "\tadd rsp, %zu\n", locals * 8);
+        g->stack_size = s->base_stack_size;
+    }
+    g->current_scope = s->parent;
+    var_table_free(&s->vars);
+    free(s);
+}
+
 static void gen_scope(Generator *g, const NodeScope *scope) {
     begin_scope(g);
     for (size_t i = 0; i < scope->size; i++) {
@@ -181,7 +203,11 @@ static void gen_scope(Generator *g, const NodeScope *scope) {
     end_scope(g);
 }
 
-static void gen_if_pred(Generator *g, const NodeIfPred *pred, const char *end_label, size_t end_label_id) {
+/* ------------------------------------------------ */
+/* If chain generation */
+/* ------------------------------------------------ */
+
+static void gen_if_chain(Generator *g, const NodeIfPred *pred, const char *end_label, size_t end_label_id) {
     if (!pred) {
         return;
     }
@@ -199,7 +225,7 @@ static void gen_if_pred(Generator *g, const NodeIfPred *pred, const char *end_la
             sb_append_fmt(g->sb, "\t; %d level elif (false)\n", g->nested_level - 1);
             sb_append_fmt(g->sb, "%s:\n", label);
             if (pred->data.elif->pred) {
-                gen_if_pred(g, pred->data.elif->pred, end_label, end_label_id);
+                gen_if_chain(g, pred->data.elif->pred, end_label, end_label_id);
             }
             free(label);
             break;
@@ -215,6 +241,10 @@ static void gen_if_pred(Generator *g, const NodeIfPred *pred, const char *end_la
         }
     } 
 }
+
+/* ------------------------------------------------ */
+/* Statement generation */
+/* ------------------------------------------------ */
 
 static void gen_stmt(Generator *g, const NodeStmt *stmt) {
     switch (stmt->type) {
@@ -266,7 +296,7 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
             sb_append_fmt(g->sb, "\t; %d level if (false)\n", level);
             sb_append_fmt(g->sb, "%s:\n", label);
             if (stmt->data.if_->pred) {
-                gen_if_pred(g, stmt->data.if_->pred, end_label, end_label_id);
+                gen_if_chain(g, stmt->data.if_->pred, end_label, end_label_id);
             }
             sb_append_fmt(g->sb, "%s:\n", end_label);
             g->nested_level--;
@@ -280,7 +310,11 @@ static void gen_stmt(Generator *g, const NodeStmt *stmt) {
     }
 }
 
-void gen_prog(Generator *g) {
+/* ------------------------------------------------ */
+/* Program generation */
+/* ------------------------------------------------ */
+
+static void gen_prog(Generator *g) {
     sb_append(g->sb, "global _start\n_start:\n");
     for (size_t i = 0; i < g->prog->size; i++) {
         gen_stmt(g, g->prog->stmts[i]);
@@ -291,6 +325,10 @@ void gen_prog(Generator *g) {
         "\tmov rdi, 0\n"
         "\tsyscall\n");
 }
+
+/* ------------------------------------------------ */
+/* Generator API */
+/* ------------------------------------------------ */
 
 StringBuilder generate(const NodeProg *prog) {
     StringBuilder sb;
