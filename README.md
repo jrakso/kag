@@ -36,11 +36,10 @@ if (x) {      // false
 } elif (y) {  // true
     exit(y);
 } else {
-  let z = "string";
-  exit(2);
+    let z = "string";
+    exit(2);
 }
 ```
-
 ---
 
 ## Build
