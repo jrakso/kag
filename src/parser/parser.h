@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tokenization/tokenization.h"
-#include "helpers/arena.h"
+#include "util/arena.h"
 
 // Forward declarations for pointer references
 typedef struct NodeExpr NodeExpr;
@@ -180,6 +180,4 @@ typedef struct {
 } Parser;
 
 // ─── Function Declarations ─────────────────────────────
-void parser_init(Parser *p, const TokenArray *arr);
-NodeProg parse_prog(Parser *p);
-void parser_free(Parser *p);
+NodeProg parse(const TokenArray *tokens, Arena *arena);

@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "helpers/file.h"
+#include "util/file.h"
+#include "util/arena.h"
+#include "util/strbuilder.h"
 #include "tokenization/tokenization.h"
 #include "parser/parser.h"
 #include "codegen/generation.h"
@@ -14,21 +16,21 @@ int main(int argc, char *argv[]) {
 
     char *src = read_file(argv[1]);  // caller frees
 
-    TokenArray tokens = tokenize(src);  // caller frees with token_array_free
+    TokenArray tokens = tokenize(src);  // caller frees
 
-    Parser p;  // Caller frees
-    parser_init(&p, &tokens);
-    NodeProg prog = parse_prog(&p);
+    Arena arena;
+    arena_init(&arena, 1024 * 1024 * 4);  // Caller frees
 
-    Generator g;  // Caller frees
-    generator_init(&g, &prog);
-    char *output = gen_prog(&g);
+    NodeProg prog = parse(&tokens, &arena);
 
-    write_file("output.asm", output);
+    StringBuilder sb = generate(&prog);  // Caller frees
+
+    write_file("output.asm", sb.data);
 
     free(src);
     token_array_free(&tokens);
-    parser_free(&p);
-    generator_free(&g);
+    sb_free(&sb);
+    arena_free(&arena);
+
     return 0;
 }

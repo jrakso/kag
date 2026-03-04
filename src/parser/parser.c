@@ -9,15 +9,11 @@
 static NodeExpr *parse_expr(Parser *p, int min_prec);
 static NodeStmt *parse_stmt(Parser *p);
 
-void parser_init(Parser *p, const TokenArray *arr) {
+void parser_init(Parser *p, const TokenArray *arr, Arena *arena) {
     p->tokens = arr->tokens;
     p->size = arr->size;
     p->pos = 0;
-    p->arena = arena_create(1024 * 1024 * 4);  // 4 mb
-}
-
-void parser_free(Parser *p) {
-    arena_destroy(p->arena);
+    p->arena = arena;
 }
 
 static Token parser_peek(const Parser *p, int offset) {
@@ -306,30 +302,35 @@ static NodeStmt *parse_stmt(Parser *p) {
     }
 }
 
-NodeProg parse_prog(Parser *p) {
-    if (!p) {
-        return (NodeProg) {0};
-    }
-    NodeProg prog;
-    prog.size = 0;
-    prog.capacity = 4;
-    prog.stmts = arena_alloc(p->arena, prog.capacity * sizeof(NodeStmt *));
+void parse_prog(Parser *p, NodeProg *prog) {
     while (parser_peek(p, PEEK_CURRENT).type != TOKEN_EOF) {
         NodeStmt *stmt = parse_stmt(p);
         if (!stmt) {
             parser_error(p, "statement");
         }
-        if (prog.size == prog.capacity) {
-            size_t new_capacity = prog.capacity * 2;
+        if (prog->size == prog->capacity) {
+            size_t new_capacity = prog->capacity * 2;
             NodeStmt **new_array = arena_alloc(p->arena, new_capacity * sizeof(NodeStmt *));
-            for (size_t i = 0; i < prog.size; i++) {
-                new_array[i] = prog.stmts[i];
+            for (size_t i = 0; i < prog->size; i++) {
+                new_array[i] = prog->stmts[i];
             }
-            prog.stmts = new_array;
-            prog.capacity = new_capacity;
+            prog->stmts = new_array;
+            prog->capacity = new_capacity;
         }
-        prog.stmts[prog.size++] = stmt;
+        prog->stmts[prog->size++] = stmt;
     }
+}
 
+NodeProg parse(const TokenArray *tokens, Arena *arena) {
+    if (!tokens || !arena) {
+        return (NodeProg) {0};
+    }
+    Parser p;
+    parser_init(&p, tokens, arena);
+    NodeProg prog;
+    prog.size = 0;
+    prog.capacity = 4;
+    prog.stmts = arena_alloc(p.arena, prog.capacity * sizeof(NodeStmt *));
+    parse_prog(&p, &prog);
     return prog;
 }

@@ -1,20 +1,18 @@
 #pragma once
 
 #include "parser/parser.h"
-#include "helpers/strbuilder.h"
+#include "util/strbuilder.h"
 #include "vartable.h"
 
 typedef struct Scope Scope;
 
 typedef struct {
     const NodeProg *prog;
-    StringBuilder sb;
+    StringBuilder *sb;
     size_t stack_size;
     size_t label_count;
     Scope *current_scope;
     int nested_level;
 } Generator;
 
-void generator_init(Generator *g, const NodeProg *prog);
-char *gen_prog(Generator *g);
-void generator_free(Generator *g);
+StringBuilder generate(const NodeProg *prog);

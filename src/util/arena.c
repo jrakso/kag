@@ -2,12 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-Arena *arena_create(size_t size) {
-    Arena *arena = malloc(sizeof(Arena));
-    if (!arena) {
-        perror("malloc");
-        exit(EXIT_FAILURE);
-    }
+void arena_init(Arena *arena, size_t size) {
     arena->base = malloc(size);
     if (!arena->base) {
         perror("malloc");
@@ -15,7 +10,6 @@ Arena *arena_create(size_t size) {
     }
     arena->size = size;
     arena->offset = 0;
-    return arena;
 }
 
 void *arena_alloc(Arena *arena, size_t size) {
@@ -23,7 +17,7 @@ void *arena_alloc(Arena *arena, size_t size) {
         fprintf(stderr, "Arena out of memory\n");
         exit(EXIT_FAILURE);
     }
-    void *ptr = arena->base + arena->offset;
+    void *ptr = (char *)arena->base + arena->offset;
     arena->offset += size;
     return ptr;
 }
@@ -32,7 +26,6 @@ void arena_reset(Arena *arena) {
     arena->offset = 0;
 }
 
-void arena_destroy(Arena *arena) {
+void arena_free(Arena *arena) {
     free(arena->base);
-    free(arena);
 }
