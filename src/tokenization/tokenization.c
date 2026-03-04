@@ -38,7 +38,7 @@ static void token_array_append(TokenArray *tokens, Token tok) {
 /* Tokenizer helpers */
 /* ------------------------------------------------ */
 
-static char *copy_token_value(const char *src, size_t start, size_t end) {
+static char *slice_string(const char *src, size_t start, size_t end) {
     size_t len = end - start;
     char *value = malloc(len + 1);  // caller frees with token_array_free
     if (!value) {
@@ -73,13 +73,14 @@ TokenArray tokenize(const char *src) {
     int line_count = 1;
     while (peek(&t, PEEK_CURRENT) != '\0') {
         const char c = peek(&t, PEEK_CURRENT);
+
         if (isalpha(c)) {
             size_t start = t.pos;
             consume(&t);
             while (isalnum(peek(&t, PEEK_CURRENT)))
                 consume(&t);
             size_t end = t.pos;
-            char *value = copy_token_value(t.src, start, end);
+            char *value = slice_string(t.src, start, end);
             if (strcmp(value, "exit") == 0) {
                 token_array_append(&tokens, (Token){ .type = TOKEN_EXIT, .line = line_count, .value = NULL });
                 free(value);  // prevent leak
@@ -99,73 +100,81 @@ TokenArray tokenize(const char *src) {
                 token_array_append(&tokens, (Token){ .type = TOKEN_IDENT, .line = line_count, .value = value });
             }
         }
+
         else if (isdigit(c)) {
             size_t start = t.pos;
             consume(&t);
             while (isdigit(peek(&t, PEEK_CURRENT)))
                 consume(&t);
             size_t end = t.pos;
-            char *value = copy_token_value(t.src, start, end);
+            char *value = slice_string(t.src, start, end);
             token_array_append(&tokens, (Token){ .type = TOKEN_INT_LITERAL, .line = line_count, .value = value });
-        }
+        } 
+        
         else if (c == '/' && peek(&t, PEEK_NEXT) == '/') {
             consume(&t);
             consume(&t);
             while (peek(&t, PEEK_CURRENT) != '\0' && peek(&t, PEEK_CURRENT) != '\n') {
                 consume(&t);
             }
-        }
-        else if (c == '(') {
-            consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_PAREN, .line = line_count, .value = NULL });
-        }
-        else if (c == ')') {
-            consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_PAREN, .line = line_count, .value = NULL });
-        }
-        else if (c == '=') {
-            consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_EQ, .line = line_count, .value = NULL });
-        }
-        else if (c == '+') {
-            consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_PLUS, .line = line_count, .value = NULL });
-        }
-        else if (c == '-') {
-            consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_MINUS, .line = line_count, .value = NULL });
-        }
-        else if (c == '*') {
-            consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_MULTI, .line = line_count, .value = NULL });
-        }
-        else if (c == '/') {
-            consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_FSLASH, .line = line_count, .value = NULL });
-        }
-        else if (c == ';') {
-            consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_SEMICOLON, .line = line_count, .value = NULL });
-        }
-        else if (c == '{') {
-            consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_CURLY, .line = line_count, .value = NULL });
-        }
-        else if (c == '}') {
-            consume(&t);
-            token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_CURLY, .line = line_count, .value = NULL });
-        }
-        else if (c == '\n') {
-            consume(&t);
-            line_count++;
-        }
-        else if (isspace(c)) {
-            consume(&t);
-        }
+        } 
+        
         else {
-            fprintf(stderr, "line %d: tokenizer error: invalid token '%c'\n", line_count, peek(&t, PEEK_CURRENT));
-            token_array_free(&tokens);
-            exit(EXIT_FAILURE);
+            switch (c) {
+                case '(':
+                    consume(&t);
+                    token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_PAREN, .line = line_count, .value = NULL });
+                    break;
+                case ')':
+                    consume(&t);
+                    token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_PAREN, .line = line_count, .value = NULL });
+                    break;
+                case '=':
+                    consume(&t);
+                    token_array_append(&tokens, (Token){ .type = TOKEN_EQ, .line = line_count, .value = NULL });
+                    break;
+                case '+':
+                    consume(&t);
+                    token_array_append(&tokens, (Token){ .type = TOKEN_PLUS, .line = line_count, .value = NULL });
+                    break;
+                case '-':
+                    consume(&t);
+                    token_array_append(&tokens, (Token){ .type = TOKEN_MINUS, .line = line_count, .value = NULL });
+                    break;
+                case '*':
+                    consume(&t);
+                    token_array_append(&tokens, (Token){ .type = TOKEN_MULTI, .line = line_count, .value = NULL });
+                    break;
+                case '/':
+                    consume(&t);
+                    token_array_append(&tokens, (Token){ .type = TOKEN_FSLASH, .line = line_count, .value = NULL });
+                    break;
+                case ';':
+                    consume(&t);
+                    token_array_append(&tokens, (Token){ .type = TOKEN_SEMICOLON, .line = line_count, .value = NULL });
+                    break;
+                case '{':
+                    consume(&t);
+                    token_array_append(&tokens, (Token){ .type = TOKEN_OPEN_CURLY, .line = line_count, .value = NULL });
+                    break;
+                case '}':
+                    consume(&t);
+                    token_array_append(&tokens, (Token){ .type = TOKEN_CLOSE_CURLY, .line = line_count, .value = NULL });
+                    break;
+                case '\n':
+                    consume(&t);
+                    line_count++;
+                    break;
+                default:
+                    if (isspace(c)) {
+                        consume(&t);
+                    } else {
+                        fprintf(stderr, "line %d: tokenizer error: invalid token '%c'\n", line_count, c);
+                        token_array_free(&tokens);
+                        exit(EXIT_FAILURE);                    
+                    }
+                    break;
+            }
         }
     }
     return tokens;
