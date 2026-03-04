@@ -1,5 +1,5 @@
 # build outputs
-/build/
+build/
 *.o
 *.out
 
@@ -13,12 +13,8 @@
 
 # shell scripts
 *.sh
-/.vscode/
+.vscode/
 
 *.natvis
 
-/docs/
-
-restructure/
-
-Makefile
+docs/
